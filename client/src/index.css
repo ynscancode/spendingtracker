@@ -25,6 +25,7 @@
   --money-in:             #8FCB98;
   --money-out:            #E2917F;
   --button-text-on-accent:#1E1B19;
+  --neutral-bg:           #5A534D;
 
   --font-xs:   0.8125rem;  /* 13px */
   --font-sm:   0.875rem;   /* 14px */
@@ -41,6 +42,13 @@
 
 * {
   box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 input:focus-visible,
@@ -210,8 +218,9 @@ th, td {
   background: var(--accent-hover);
 }
 
-.btn-table.btn-delete {
-  background: #5A534D;
+.btn-table.btn-delete,
+.btn-neutral {
+  background: var(--neutral-bg);
   color: var(--text);
 }
 

@@ -39,7 +39,7 @@ export default function EditTransactionPanel({ txn, onSave, onCancel }) {
           <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} />
         </label>
         <button type="submit" className="btn-with-icon"><Check size={16} aria-hidden="true" /> Save</button>
-        <button type="button" className="btn btn-with-icon" style={{ background: '#5A534D', color: 'var(--text)' }} onClick={onCancel}><X size={16} aria-hidden="true" /> Cancel</button>
+        <button type="button" className="btn btn-with-icon btn-neutral" onClick={onCancel}><X size={16} aria-hidden="true" /> Cancel</button>
         {error && <span className="error-text" role="alert">{error}</span>}
       </form>
     </div>
