@@ -1092,3 +1092,106 @@ td {
   color: var(--text);
   margin-top: 6px;
 }
+
+/* ---------- Accessibility utilities ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Budget page ---------- */
+
+.month-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-sm) + 4px);
+}
+
+.month-switcher-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.month-switcher-btn:hover {
+  color: var(--text);
+}
+
+.month-switcher-label {
+  font: 600 14px/1 var(--font-ui);
+  color: var(--text);
+  min-width: 130px;
+  text-align: center;
+}
+
+.budget-row {
+  margin-bottom: 18px;
+}
+
+.budget-row:last-child {
+  margin-bottom: 0;
+}
+
+.budget-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.budget-row-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.budget-no-budget-tag {
+  font-size: 12px;
+}
+
+.budget-row-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-row-input input {
+  width: 120px;
+  font-family: var(--font-num);
+}
+
+.budget-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.budget-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 500 12px/1 var(--font-ui);
+  color: var(--muted);
+}

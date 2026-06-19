@@ -3,7 +3,7 @@ import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
 import { formatCurrency, formatSigned } from '../utils/format.js'
 import { computeDailyInsights } from '../utils/insights.js'
-import { ACCOUNTS, colorForCategory } from '../constants/categories.js'
+import { ACCOUNTS, BUDGETABLE_CATEGORIES, colorForCategory } from '../constants/categories.js'
 import { DAILY_BUDGET } from '../constants/budget.js'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
 
@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [accounts, setAccounts] = useState([])
   const [monthlySummary, setMonthlySummary] = useState(null)
   const [monthTransactions, setMonthTransactions] = useState([])
+  const [budgets, setBudgets] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -25,14 +26,16 @@ export default function DashboardPage() {
   async function loadAll() {
     setLoading(true)
     const { from, to } = monthRangeFor(month)
-    const [accountsData, monthly, txns] = await Promise.all([
+    const [accountsData, monthly, txns, budgetsRes] = await Promise.all([
       api.getAccounts(),
       api.getMonthlySummary(month),
       api.getTransactions({ from, to }),
+      api.getBudgets(month),
     ])
     setAccounts(accountsData)
     setMonthlySummary(monthly)
     setMonthTransactions(txns)
+    setBudgets(budgetsRes.budgets)
     setLoading(false)
   }
 
@@ -129,6 +132,28 @@ export default function DashboardPage() {
     return { height: h, bg, opacity }
   })
 
+  // Budget summary: only SET budgets count toward totals/percent (unset
+  // categories are excluded from both budgeted and spent sides per spec).
+  const catActualsMap = {}
+  realOut.forEach((t) => { catActualsMap[t.category] = (catActualsMap[t.category] || 0) + t.amount })
+  const budgetRows = budgets.map((b) => {
+    const actual = catActualsMap[b.category] || 0
+    const pct = b.amount > 0 ? Math.round((actual / b.amount) * 100) : (actual > 0 ? Infinity : 0)
+    const health = b.amount === 0
+      ? (actual > 0 ? 'over' : 'under')
+      : (pct > 100 ? 'over' : pct >= 90 ? 'near' : 'under')
+    return { category: b.category, budget: b.amount, actual, pct, health }
+  })
+  const totalBudgeted = budgetRows.reduce((s, r) => s + r.budget, 0)
+  const totalSpentBudgeted = budgetRows.reduce((s, r) => s + r.actual, 0)
+  const budgetUsedPct = totalBudgeted > 0 ? Math.round((totalSpentBudgeted / totalBudgeted) * 100) : 0
+  const qualifying = budgetRows.filter((r) => r.health === 'over' || r.health === 'near')
+  const overRows = qualifying.filter((r) => r.health === 'over').sort((a, b) => b.pct - a.pct)
+  const nearRows = qualifying.filter((r) => r.health === 'near').sort((a, b) => b.pct - a.pct)
+  const sortedQualifying = [...overRows, ...nearRows]
+  const topQualifying = sortedQualifying.slice(0, 3)
+  const extraQualifyingCount = sortedQualifying.length - topQualifying.length
+
   // Top spending by category (this month, real spend only).
   const catTotalsMap = {}
   realOut.forEach((t) => { catTotalsMap[t.category] = (catTotalsMap[t.category] || 0) + t.amount })
@@ -179,6 +204,81 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-row">
+          <h2>Budget</h2>
+          {totalBudgeted > 0 && (
+            <span
+              className="pill-tag"
+              style={totalSpentBudgeted > totalBudgeted ? { background: 'color-mix(in oklab, var(--red) 16%, transparent)', color: 'var(--red)' } : undefined}
+            >
+              {budgetUsedPct}% of budget used
+            </span>
+          )}
+        </div>
+        <div className="card-grid tiles">
+          <div className="stat-tile">
+            <div className="stat-tile-label">Total budgeted</div>
+            <div className="stat-tile-value">{formatCurrency(totalBudgeted)}</div>
+            <div className="stat-tile-note" style={{ color: 'var(--muted)' }}>
+              {budgetRows.length} of {BUDGETABLE_CATEGORIES.length} categories set
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-label">Total spent</div>
+            <div
+              className="stat-tile-value"
+              style={{ color: totalBudgeted > 0 && totalSpentBudgeted > totalBudgeted ? 'var(--red)' : 'var(--text)' }}
+            >
+              {formatCurrency(totalSpentBudgeted)}
+            </div>
+            <div className="stat-tile-note" style={{ color: totalBudgeted > 0 ? 'var(--muted)' : 'var(--faint)' }}>
+              {totalBudgeted > 0 ? `${budgetUsedPct}% of budget` : 'No budgets set yet'}
+            </div>
+          </div>
+        </div>
+
+        {budgetRows.length === 0 ? (
+          <p className="empty-text" style={{ marginTop: 16 }}>
+            No budgets set for {monthLabel(month)}. Go to the Budget tab to set one.
+          </p>
+        ) : sortedQualifying.length === 0 ? (
+          <div className="activity-row" style={{ marginTop: 4 }}>
+            <span className="activity-dot" style={{ background: 'var(--green)' }} />
+            <div className="activity-main">
+              <div className="activity-comment">All budgeted categories are on track.</div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 4 }}>
+            {topQualifying.map((r) => {
+              const suffix = r.health === 'over' ? ' — over' : ' — near limit'
+              const suffixColor = r.health === 'over' ? 'var(--red)' : 'var(--warning-text)'
+              return (
+                <div className="activity-row" key={r.category}>
+                  <span className="activity-dot" style={{ background: colorForCategory(r.category) }} />
+                  <div className="activity-main">
+                    <div className="activity-comment">{r.category}</div>
+                    <div className="activity-meta">
+                      {r.pct}% of {formatCurrency(r.budget)} budget
+                      <span style={{ color: suffixColor }}>{suffix}</span>
+                    </div>
+                  </div>
+                  <div className="activity-amount" style={{ color: r.health === 'over' ? 'var(--red)' : 'var(--warning-text)' }}>
+                    {formatCurrency(r.actual)}
+                  </div>
+                </div>
+              )
+            })}
+            {extraQualifyingCount > 0 && (
+              <div className="activity-meta" style={{ marginTop: 8 }}>
+                +{extraQualifyingCount} more over or near budget — see Budget tab
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card-grid">

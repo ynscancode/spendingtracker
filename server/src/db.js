@@ -14,11 +14,20 @@ function runMigrations() {
   const hasTransactionsTable = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'")
     .get();
-  if (hasTransactionsTable) return;
+  if (!hasTransactionsTable) {
+    const migrationPath = path.join(__dirname, 'migrations', '001_init.sql');
+    const sql = fs.readFileSync(migrationPath, 'utf8');
+    db.exec(sql);
+  }
 
-  const migrationPath = path.join(__dirname, 'migrations', '001_init.sql');
-  const sql = fs.readFileSync(migrationPath, 'utf8');
-  db.exec(sql);
+  const hasBudgetsTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='budgets'")
+    .get();
+  if (!hasBudgetsTable) {
+    const migrationPath = path.join(__dirname, 'migrations', '002_budgets.sql');
+    const sql = fs.readFileSync(migrationPath, 'utf8');
+    db.exec(sql);
+  }
 }
 
 runMigrations();

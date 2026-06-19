@@ -34,6 +34,18 @@ export function groupByYearMonthDay(transactions) {
   return byYear;
 }
 
+export function prevMonthStr(monthStr) {
+  const [year, month] = monthStr.split('-').map(Number)
+  const d = new Date(year, month - 2, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+export function nextMonthStr(monthStr) {
+  const [year, month] = monthStr.split('-').map(Number)
+  const d = new Date(year, month, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 export function monthLabel(monthStr) {
   const [year, month] = monthStr.split('-').map(Number);
   return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });

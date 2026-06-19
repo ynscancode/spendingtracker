@@ -13,3 +13,7 @@ export const ACCOUNTS = {
   SPENDING: 1,
   SAVINGS: 2,
 };
+
+// Outgoing categories a user can actually set a monthly budget for —
+// transfer-out is system-managed, never budgetable.
+export const BUDGETABLE_CATEGORIES = OUTGOING_CATEGORIES.filter((c) => c !== 'transfer-out');

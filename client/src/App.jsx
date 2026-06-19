@@ -4,6 +4,7 @@ import Header from './components/layout/Header.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import TransactionsPage from './pages/TransactionsPage.jsx'
 import BreakdownPage from './pages/BreakdownPage.jsx'
+import BudgetPage from './pages/BudgetPage.jsx'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/breakdown" element={<BreakdownPage />} />
+            <Route path="/budget" element={<BudgetPage />} />
           </Routes>
         </main>
       </div>

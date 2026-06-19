@@ -44,20 +44,6 @@ export function getDailySummary(date) {
   return { date, combined, perAccount, byCategoryIn, byCategoryOut };
 }
 
-export function getDailySummariesForRange(from, to) {
-  return db
-    .prepare(`
-      SELECT date,
-        COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS total_in,
-        COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS total_out
-      FROM transactions
-      WHERE date >= ? AND date <= ?
-      GROUP BY date
-      ORDER BY date
-    `)
-    .all(from, to);
-}
-
 export function getMonthlySummary(month) {
   const totals = db
     .prepare(`
