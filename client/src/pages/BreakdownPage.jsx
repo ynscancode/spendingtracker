@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client.js'
 import { currentMonthStr, monthLabel } from '../utils/dateUtils.js'
 import { formatCurrency } from '../utils/format.js'
-import { colorForCategory } from '../constants/categories.js'
+import { useCategories } from '../contexts/categories.js'
 import DonutChart from '../components/breakdown/DonutChart.jsx'
 import { buildDonutSegments } from '../utils/donutMath.js'
 import CategoryBarList from '../components/breakdown/CategoryBarList.jsx'
 import BreakdownControls from '../components/breakdown/BreakdownControls.jsx'
 
-function decorate(rows) {
-  return rows.map((r) => ({ category: r.category, value: r.total, color: colorForCategory(r.category) }))
+function decorate(rows, colorFor) {
+  return rows.map((r) => ({ category: r.category, value: r.total, color: colorFor(r.category) }))
     .sort((a, b) => b.value - a.value)
 }
 
 export default function BreakdownPage() {
+  const { colorFor } = useCategories()
   const [availableMonths, setAvailableMonths] = useState([])
   const [month, setMonth] = useState(currentMonthStr())
   const [summary, setSummary] = useState(null)
@@ -38,8 +39,8 @@ export default function BreakdownPage() {
     })
   }, [month])
 
-  const outCats = useMemo(() => (summary ? decorate(summary.byCategoryOut) : []), [summary])
-  const inCats = useMemo(() => (summary ? decorate(summary.byCategoryIn) : []), [summary])
+  const outCats = useMemo(() => (summary ? decorate(summary.byCategoryOut, colorFor) : []), [summary, colorFor])
+  const inCats = useMemo(() => (summary ? decorate(summary.byCategoryIn, colorFor) : []), [summary, colorFor])
   const outTotal = outCats.reduce((s, c) => s + c.value, 0)
   const inTotal = inCats.reduce((s, c) => s + c.value, 0)
   const outDonut = useMemo(() => buildDonutSegments(outCats, outTotal), [outCats, outTotal])

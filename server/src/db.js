@@ -28,6 +28,15 @@ function runMigrations() {
     const sql = fs.readFileSync(migrationPath, 'utf8');
     db.exec(sql);
   }
+
+  const hasCategoriesTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='categories'")
+    .get();
+  if (!hasCategoriesTable) {
+    const migrationPath = path.join(__dirname, 'migrations', '003_categories.sql');
+    const sql = fs.readFileSync(migrationPath, 'utf8');
+    db.exec(sql);
+  }
 }
 
 runMigrations();

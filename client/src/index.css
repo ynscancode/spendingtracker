@@ -1093,6 +1093,66 @@ td {
   margin-top: 6px;
 }
 
+/* ---------- Category manager ---------- */
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: 600 12.5px/1 var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 6px;
+  display: inline-block;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.category-manager-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.category-manager-column h3 {
+  margin: 0;
+  font: 600 13px/1 var(--font-ui);
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.category-manager-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-manager-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.category-manager-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.category-manager-add input {
+  flex: 1;
+}
+
 /* ---------- Accessibility utilities ---------- */
 
 .visually-hidden {

@@ -1,5 +1,5 @@
 import db from '../db.js';
-import { BUDGETABLE_CATEGORIES } from '../constants/categories.js';
+import { getBudgetableNames } from './categoryService.js';
 
 class ValidationError extends Error {
   constructor(message) {
@@ -18,7 +18,7 @@ function assertValidMonth(month) {
 }
 
 function assertValidCategory(category) {
-  if (!category || !BUDGETABLE_CATEGORIES.includes(category)) {
+  if (!category || !getBudgetableNames().includes(category)) {
     throw new ValidationError(`category "${category}" is not budgetable`);
   }
 }

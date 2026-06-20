@@ -4,6 +4,7 @@ import accountsRouter from './routes/accounts.js';
 import transactionsRouter from './routes/transactions.js';
 import summaryRouter from './routes/summary.js';
 import budgetsRouter from './routes/budgets.js';
+import categoriesRouter from './routes/categories.js';
 
 const app = express();
 app.use(cors());
@@ -13,6 +14,7 @@ app.use('/api/accounts', accountsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/summary', summaryRouter);
 app.use('/api/budgets', budgetsRouter);
+app.use('/api/categories', categoriesRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

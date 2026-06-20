@@ -5,3 +5,4 @@ server/budget.db-wal
 server/budget.db-shm
 client/dist/
 .DS_Store
+.playwright-mcp/

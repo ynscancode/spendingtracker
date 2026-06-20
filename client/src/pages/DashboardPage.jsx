@@ -3,8 +3,9 @@ import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
 import { formatCurrency, formatSigned } from '../utils/format.js'
 import { computeDailyInsights } from '../utils/insights.js'
-import { ACCOUNTS, BUDGETABLE_CATEGORIES, colorForCategory } from '../constants/categories.js'
+import { ACCOUNTS } from '../constants/categories.js'
 import { DAILY_BUDGET } from '../constants/budget.js'
+import { useCategories } from '../contexts/categories.js'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
 
 function daysInMonth(monthStr) {
@@ -13,6 +14,7 @@ function daysInMonth(monthStr) {
 }
 
 export default function DashboardPage() {
+  const { outgoing, colorFor } = useCategories()
   const [accounts, setAccounts] = useState([])
   const [monthlySummary, setMonthlySummary] = useState(null)
   const [monthTransactions, setMonthTransactions] = useState([])
@@ -158,7 +160,7 @@ export default function DashboardPage() {
   const catTotalsMap = {}
   realOut.forEach((t) => { catTotalsMap[t.category] = (catTotalsMap[t.category] || 0) + t.amount })
   const topCats = Object.entries(catTotalsMap)
-    .map(([category, value]) => ({ category, value, color: colorForCategory(category) }))
+    .map(([category, value]) => ({ category, value, color: colorFor(category) }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 6)
   const maxCat = Math.max(1, ...topCats.map((c) => c.value))
@@ -172,7 +174,7 @@ export default function DashboardPage() {
       const isTransfer = !!t.is_transfer
       return {
         id: t.id,
-        color: isTransfer ? 'var(--faint)' : colorForCategory(t.category),
+        color: isTransfer ? 'var(--faint)' : colorFor(t.category),
         comment: isTransfer ? 'Transfer' : t.comment,
         meta: `${t.account_id === ACCOUNTS.SAVINGS ? 'Savings' : 'Spending'} · ${dayLabel(t.date)}`,
         amountText: formatSigned(signed),
@@ -223,7 +225,7 @@ export default function DashboardPage() {
             <div className="stat-tile-label">Total budgeted</div>
             <div className="stat-tile-value">{formatCurrency(totalBudgeted)}</div>
             <div className="stat-tile-note" style={{ color: 'var(--muted)' }}>
-              {budgetRows.length} of {BUDGETABLE_CATEGORIES.length} categories set
+              {budgetRows.length} of {outgoing.length} categories set
             </div>
           </div>
           <div className="stat-tile">
@@ -258,7 +260,7 @@ export default function DashboardPage() {
               const suffixColor = r.health === 'over' ? 'var(--red)' : 'var(--warning-text)'
               return (
                 <div className="activity-row" key={r.category}>
-                  <span className="activity-dot" style={{ background: colorForCategory(r.category) }} />
+                  <span className="activity-dot" style={{ background: colorFor(r.category) }} />
                   <div className="activity-main">
                     <div className="activity-comment">{r.category}</div>
                     <div className="activity-meta">

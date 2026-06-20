@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client.js'
 import { currentMonthStr, monthLabel } from '../utils/dateUtils.js'
 import { formatCurrency } from '../utils/format.js'
-import { BUDGETABLE_CATEGORIES, colorForCategory } from '../constants/categories.js'
+import { useCategories } from '../contexts/categories.js'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 
 // Budget health classification shared by the editing list and the chart.
@@ -30,6 +30,7 @@ function suffixFor(health) {
 }
 
 export default function BudgetPage() {
+  const { outgoing, colorFor } = useCategories()
   const [month, setMonth] = useState(currentMonthStr())
   const [summary, setSummary] = useState(null)
   const [budgetsByCategory, setBudgetsByCategory] = useState({})
@@ -64,12 +65,12 @@ export default function BudgetPage() {
   const actualsMap = {}
   summary.byCategoryOut.forEach((r) => { actualsMap[r.category] = r.total })
 
-  const rows = BUDGETABLE_CATEGORIES.map((category) => {
+  const rows = outgoing.map(({ name: category }) => {
     const actual = actualsMap[category] || 0
     const budget = Object.prototype.hasOwnProperty.call(budgetsByCategory, category)
       ? budgetsByCategory[category]
       : null
-    return { category, actual, budget, health: healthFor(actual, budget), color: colorForCategory(category) }
+    return { category, actual, budget, health: healthFor(actual, budget), color: colorFor(category) }
   })
 
   const maxActual = Math.max(1, ...rows.map((r) => r.actual))

@@ -1,9 +1,11 @@
 import { Pencil, Trash2 } from 'lucide-react'
-import { ACCOUNT_NAMES, colorForCategory } from '../../constants/categories.js'
+import { ACCOUNT_NAMES } from '../../constants/categories.js'
 import { highlightClassFor, transferBadgeFor } from './highlight.js'
 import { formatCurrency } from '../../utils/format.js'
+import { useCategories } from '../../contexts/categories.js'
 
 export default function TransactionRow({ txn, onEdit, onDelete }) {
+  const { colorFor } = useCategories()
   const highlightClass = highlightClassFor(txn)
   const isTransfer = !!txn.is_transfer
   // Transfers get one neutral row background; >$20/>$40 spend warnings render as a
@@ -13,7 +15,7 @@ export default function TransactionRow({ txn, onEdit, onDelete }) {
   const dotClass = isSpendWarning ? highlightClass : ''
   const amountText = `$${txn.amount.toFixed(2)}`
   const badge = transferBadgeFor(txn)
-  const dotColor = isTransfer ? 'var(--faint)' : colorForCategory(txn.category)
+  const dotColor = isTransfer ? 'var(--faint)' : colorFor(txn.category)
   const warningTitle = highlightClass === 'highlight-red'
     ? 'Large spend: over $40'
     : highlightClass === 'highlight-orange'

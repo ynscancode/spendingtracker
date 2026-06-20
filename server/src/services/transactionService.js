@@ -1,5 +1,12 @@
 import db from '../db.js';
-import { OUTGOING_CATEGORIES, INCOMING_CATEGORIES, TRANSFER_CATEGORIES, ACCOUNTS } from '../constants/categories.js';
+import { ACCOUNTS } from '../constants/categories.js';
+import { isValidNormalCategory } from './categoryService.js';
+
+// Categories only ever set by the transfer flow, never picked manually on a
+// normal transaction. The transfer-insert path below still writes these
+// literal strings directly (ADR-023 AC5 — zero behavior change there); this
+// constant exists only to reject them on the normal POST/PUT path.
+const TRANSFER_CATEGORIES = ['transfer-in', 'transfer-out'];
 
 class ValidationError extends Error {
   constructor(message) {
@@ -19,8 +26,7 @@ function assertValidNormalTransaction({ date, account_id, direction, category, a
   if (TRANSFER_CATEGORIES.includes(category)) {
     throw new ValidationError('transfer categories cannot be set on normal transactions');
   }
-  const allowed = direction === 'out' ? OUTGOING_CATEGORIES : INCOMING_CATEGORIES;
-  if (!allowed.includes(category)) {
+  if (!isValidNormalCategory(category, direction)) {
     throw new ValidationError(`category "${category}" is not valid for direction "${direction}"`);
   }
   if (typeof amount !== 'number' || amount <= 0) {

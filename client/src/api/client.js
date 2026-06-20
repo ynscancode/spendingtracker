@@ -35,4 +35,8 @@ export const api = {
   getBudgets: (month) => request('GET', `/budgets?month=${month}`),
   setBudget: ({ month, category, amount }) => request('PUT', '/budgets', { month, category, amount }),
   clearBudget: ({ month, category }) => request('DELETE', `/budgets?month=${month}&category=${category}`),
+
+  getCategories: () => request('GET', '/categories'),
+  createCategory: ({ name, list }) => request('POST', '/categories', { name, list }),
+  deleteCategory: (id) => request('DELETE', `/categories/${id}`),
 };
