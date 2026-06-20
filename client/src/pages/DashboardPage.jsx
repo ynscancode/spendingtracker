@@ -3,7 +3,7 @@ import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
 import { formatCurrency, formatSigned } from '../utils/format.js'
 import { computeDailyInsights } from '../utils/insights.js'
-import { ACCOUNTS } from '../constants/categories.js'
+import { ACCOUNTS, ACCOUNT_NAMES } from '../constants/categories.js'
 import { DAILY_BUDGET } from '../constants/budget.js'
 import { useCategories } from '../contexts/categories.js'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
@@ -16,11 +16,11 @@ function daysInMonth(monthStr) {
 export default function DashboardPage() {
   const { outgoing, colorFor } = useCategories()
   const [accounts, setAccounts] = useState([])
-  const [monthlySummary, setMonthlySummary] = useState(null)
   const [monthTransactions, setMonthTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [scopeAccountId, setScopeAccountId] = useState(ACCOUNTS.SPENDING)
 
   const month = currentMonthStr()
   const today = todayStr()
@@ -28,14 +28,12 @@ export default function DashboardPage() {
   async function loadAll() {
     setLoading(true)
     const { from, to } = monthRangeFor(month)
-    const [accountsData, monthly, txns, budgetsRes] = await Promise.all([
+    const [accountsData, txns, budgetsRes] = await Promise.all([
       api.getAccounts(),
-      api.getMonthlySummary(month),
       api.getTransactions({ from, to }),
       api.getBudgets(month),
     ])
     setAccounts(accountsData)
-    setMonthlySummary(monthly)
     setMonthTransactions(txns)
     setBudgets(budgetsRes.budgets)
     setLoading(false)
@@ -56,15 +54,15 @@ export default function DashboardPage() {
     await loadAll()
   }
 
-  if (loading || !monthlySummary) {
+  if (loading) {
     return <div className="loading-placeholder"><p>Loading...</p></div>
   }
 
+  const scopedAccount = accounts.find((a) => a.id === scopeAccountId)
   const spendingAccount = accounts.find((a) => a.id === ACCOUNTS.SPENDING)
   const savingsAccount = accounts.find((a) => a.id === ACCOUNTS.SAVINGS)
-  const spendBal = spendingAccount?.balance ?? 0
-  const saveBal = savingsAccount?.balance ?? 0
-  const netWorth = spendBal + saveBal
+  const scopedBal = scopedAccount?.balance ?? 0
+  const netWorth = (spendingAccount?.balance ?? 0) + (savingsAccount?.balance ?? 0)
 
   // Start-of-month balance = current balance minus this month's net delta
   // for that account (transactions already include transfers, which
@@ -74,15 +72,21 @@ export default function DashboardPage() {
       .filter((t) => t.account_id === accountId)
       .reduce((sum, t) => sum + (t.direction === 'in' ? t.amount : -t.amount), 0)
   }
-  const spendDelta = netDeltaForAccount(ACCOUNTS.SPENDING)
-  const saveDelta = netDeltaForAccount(ACCOUNTS.SAVINGS)
+  const scopedDelta = netDeltaForAccount(scopeAccountId)
+  const netDelta = netDeltaForAccount(ACCOUNTS.SPENDING) + netDeltaForAccount(ACCOUNTS.SAVINGS)
 
-  const sumIn = monthlySummary.totalIn
-  const sumOut = monthlySummary.totalOut
+  // Everything below is scoped to the selected account.
+  const scopedTransactions = monthTransactions.filter((t) => t.account_id === scopeAccountId)
+
+  // Monthly insights money in/out/net: real money movement only, excludes
+  // transfers (distinct from the balance-delta figures above, which
+  // intentionally include transfers).
+  const sumIn = scopedTransactions.filter((t) => t.direction === 'in' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
+  const sumOut = scopedTransactions.filter((t) => t.direction === 'out' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
   const net = sumIn - sumOut
   const savingsRate = sumIn > 0 ? Math.round((net / sumIn) * 100) : 0
 
-  const insights = computeDailyInsights(monthTransactions, { todayDate: today, dailyBudget: DAILY_BUDGET })
+  const insights = computeDailyInsights(scopedTransactions, { todayDate: today, dailyBudget: DAILY_BUDGET })
 
   const dailyInsightTiles = [
     {
@@ -116,7 +120,7 @@ export default function DashboardPage() {
   ]
 
   // Daily bar chart for the whole month.
-  const realOut = monthTransactions.filter((t) => t.direction === 'out' && !t.is_transfer)
+  const realOut = scopedTransactions.filter((t) => t.direction === 'out' && !t.is_transfer)
   const dayMap = {}
   realOut.forEach((t) => {
     const d = Number(t.date.slice(8, 10))
@@ -165,8 +169,8 @@ export default function DashboardPage() {
     .slice(0, 6)
   const maxCat = Math.max(1, ...topCats.map((c) => c.value))
 
-  // Recent activity: last 6 transactions this month.
-  const recent = [...monthTransactions]
+  // Recent activity: last 6 transactions this month for the selected account.
+  const recent = [...scopedTransactions]
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
     .slice(0, 6)
     .map((t) => {
@@ -176,7 +180,7 @@ export default function DashboardPage() {
         id: t.id,
         color: isTransfer ? 'var(--faint)' : colorFor(t.category),
         comment: isTransfer ? 'Transfer' : t.comment,
-        meta: `${t.account_id === ACCOUNTS.SAVINGS ? 'Savings' : 'Spending'} · ${dayLabel(t.date)}`,
+        meta: dayLabel(t.date),
         amountText: formatSigned(signed),
         amountColor: signed >= 0 ? 'var(--green)' : 'var(--text)',
       }
@@ -189,7 +193,21 @@ export default function DashboardPage() {
           <div className="page-eyebrow">{monthLabel(month)}</div>
           <h1 className="page-title">Overview</h1>
         </div>
-        <button type="button" className="btn" onClick={() => setModalOpen(true)}>+ Add transaction</button>
+        <div className="page-header-actions">
+          <div className="pill-group">
+            {[ACCOUNTS.SPENDING, ACCOUNTS.SAVINGS].map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`pill-btn ${scopeAccountId === id ? 'active' : ''}`}
+                onClick={() => setScopeAccountId(id)}
+              >
+                {ACCOUNT_NAMES[id]}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn" onClick={() => setModalOpen(true)}>+ Add transaction</button>
+        </div>
       </div>
 
       <div className="card">
@@ -286,29 +304,19 @@ export default function DashboardPage() {
       <div className="card-grid">
         <div className="balance-card">
           <div className="balance-card-label">
-            <span className="balance-card-dot" style={{ background: 'var(--accent)' }} />
-            Spending
+            <span className="balance-card-dot" style={{ background: scopeAccountId === ACCOUNTS.SAVINGS ? 'var(--topup)' : 'var(--accent)' }} />
+            {ACCOUNT_NAMES[scopeAccountId]}
           </div>
-          <div className="balance-card-value">{formatCurrency(spendBal)}</div>
-          <div className={`balance-card-delta ${spendDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
-            {formatSigned(spendDelta)} this month
-          </div>
-        </div>
-        <div className="balance-card">
-          <div className="balance-card-label">
-            <span className="balance-card-dot" style={{ background: 'var(--topup)' }} />
-            Savings
-          </div>
-          <div className="balance-card-value">{formatCurrency(saveBal)}</div>
-          <div className={`balance-card-delta ${saveDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
-            {formatSigned(saveDelta)} this month
+          <div className="balance-card-value">{formatCurrency(scopedBal)}</div>
+          <div className={`balance-card-delta ${scopedDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
+            {formatSigned(scopedDelta)} this month
           </div>
         </div>
         <div className="balance-card accent">
           <div className="balance-card-label">Net worth</div>
           <div className="balance-card-value">{formatCurrency(netWorth)}</div>
-          <div className={`balance-card-delta ${net >= 0 ? 'delta-positive' : 'delta-negative'}`}>
-            {formatSigned(net)} this month
+          <div className={`balance-card-delta ${netDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
+            {formatSigned(netDelta)} this month
           </div>
         </div>
       </div>
