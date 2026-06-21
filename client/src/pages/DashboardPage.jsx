@@ -6,6 +6,7 @@ import { computeDailyInsights } from '../utils/insights.js'
 import { ACCOUNTS, ACCOUNT_NAMES } from '../constants/categories.js'
 import { useDailyBudget } from '../hooks/useDailyBudget.js'
 import { useCategories } from '../contexts/categories.js'
+import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
 import DonutChart from '../components/breakdown/DonutChart.jsx'
 import { buildDonutSegments } from '../utils/donutMath.js'
@@ -88,6 +89,8 @@ export default function DashboardPage() {
   const { outgoingFor, colorFor } = useCategories()
   const [accounts, setAccounts] = useState([])
   const [monthTransactions, setMonthTransactions] = useState([])
+  const [breakdownTransactions, setBreakdownTransactions] = useState([])
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr())
   const [budgets, setBudgets] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -122,6 +125,21 @@ export default function DashboardPage() {
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Decoupled from the current-month `loadAll` above — this drives only
+  // Monthly insights and the Breakdown sections (see selectedMonth usage
+  // below), so the user can browse other months there without affecting
+  // anything else on the page (Daily insights, Budget card, Top spending,
+  // Recent activity, balance cards all stay anchored to the real current
+  // month via monthTransactions/month).
+  useEffect(() => {
+    async function loadBreakdown() {
+      const { from, to } = monthRangeFor(selectedMonth)
+      const txns = await api.getTransactions({ from, to })
+      setBreakdownTransactions(txns)
+    }
+    loadBreakdown()
+  }, [selectedMonth])
 
   async function handleCreateTransaction(data) {
     await api.createTransaction(data)
@@ -184,12 +202,16 @@ export default function DashboardPage() {
 
   // Everything below is scoped to the selected account.
   const scopedTransactions = monthTransactions.filter((t) => t.account_id === scopeAccountId)
+  // Breakdown-scoped equivalent, driving only Monthly insights + the
+  // Breakdown sections (selectedMonth, not the page's current month).
+  const scopedBreakdownTransactions = breakdownTransactions.filter((t) => t.account_id === scopeAccountId)
 
   // Monthly insights money in/out/net: real money movement only, excludes
   // transfers (distinct from the balance-delta figures above, which
-  // intentionally include transfers).
-  const sumIn = scopedTransactions.filter((t) => t.direction === 'in' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
-  const sumOut = scopedTransactions.filter((t) => t.direction === 'out' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
+  // intentionally include transfers). Scoped to selectedMonth, not the
+  // page's current month.
+  const sumIn = scopedBreakdownTransactions.filter((t) => t.direction === 'in' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
+  const sumOut = scopedBreakdownTransactions.filter((t) => t.direction === 'out' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
   const net = sumIn - sumOut
   const savingsRate = sumIn > 0 ? Math.round((net / sumIn) * 100) : 0
 
@@ -233,14 +255,15 @@ export default function DashboardPage() {
     },
   ]
 
-  // Daily bar chart for the whole month.
-  const realOut = scopedTransactions.filter((t) => t.direction === 'out' && !t.is_transfer)
+  // Daily bar chart for the whole month — scoped to selectedMonth (Monthly
+  // insights), not the page's current month.
+  const breakdownRealOut = scopedBreakdownTransactions.filter((t) => t.direction === 'out' && !t.is_transfer)
   const dayMap = {}
-  realOut.forEach((t) => {
+  breakdownRealOut.forEach((t) => {
     const d = Number(t.date.slice(8, 10))
     dayMap[d] = (dayMap[d] || 0) + t.amount
   })
-  const totalDays = daysInMonth(month)
+  const totalDays = daysInMonth(selectedMonth)
   // When no daily budget is set, scale off actual max spend only — no
   // budget reference line to draw, and no "over" red-coloring since
   // there's nothing to exceed.
@@ -283,7 +306,9 @@ export default function DashboardPage() {
     return pctB - pctA
   })
 
-  // Top spending by category (this month, real spend only).
+  // Top spending by category (this month, real spend only) — stays
+  // anchored to the page's current month, independent of selectedMonth.
+  const realOut = scopedTransactions.filter((t) => t.direction === 'out' && !t.is_transfer)
   const catTotalsMap = {}
   realOut.forEach((t) => { catTotalsMap[t.category] = (catTotalsMap[t.category] || 0) + t.amount })
   const topCats = Object.entries(catTotalsMap)
@@ -312,10 +337,12 @@ export default function DashboardPage() {
 
   // Breakdown section: always shows both accounts, unaffected by the
   // page being Spending-scoped elsewhere (same treatment as Net worth).
-  const spendOut = breakdownFor(monthTransactions, ACCOUNTS.SPENDING, 'out', (cat) => colorFor(ACCOUNTS.SPENDING, cat))
-  const spendIn = breakdownFor(monthTransactions, ACCOUNTS.SPENDING, 'in', (cat) => colorFor(ACCOUNTS.SPENDING, cat))
-  const saveOut = breakdownFor(monthTransactions, ACCOUNTS.SAVINGS, 'out', (cat) => colorFor(ACCOUNTS.SAVINGS, cat))
-  const saveIn = breakdownFor(monthTransactions, ACCOUNTS.SAVINGS, 'in', (cat) => colorFor(ACCOUNTS.SAVINGS, cat))
+  // Scoped to selectedMonth via breakdownTransactions, not the page's
+  // current month.
+  const spendOut = breakdownFor(breakdownTransactions, ACCOUNTS.SPENDING, 'out', (cat) => colorFor(ACCOUNTS.SPENDING, cat))
+  const spendIn = breakdownFor(breakdownTransactions, ACCOUNTS.SPENDING, 'in', (cat) => colorFor(ACCOUNTS.SPENDING, cat))
+  const saveOut = breakdownFor(breakdownTransactions, ACCOUNTS.SAVINGS, 'out', (cat) => colorFor(ACCOUNTS.SAVINGS, cat))
+  const saveIn = breakdownFor(breakdownTransactions, ACCOUNTS.SAVINGS, 'in', (cat) => colorFor(ACCOUNTS.SAVINGS, cat))
   const spendTotalOut = spendOut.reduce((s, c) => s + c.value, 0)
   const spendTotalIn = spendIn.reduce((s, c) => s + c.value, 0)
   const saveTotalOut = saveOut.reduce((s, c) => s + c.value, 0)
@@ -484,52 +511,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-row">
-          <h2>Monthly insights</h2>
-          <span className="pill-tag">Savings rate {savingsRate}%</span>
-        </div>
-        <div className="money-flow-grid">
-          <div>
-            <div className="money-flow-label">Money in</div>
-            <div className="money-flow-value" style={{ color: 'var(--green)' }}>{formatCurrency(sumIn)}</div>
-          </div>
-          <div>
-            <div className="money-flow-label">Money out</div>
-            <div className="money-flow-value" style={{ color: 'var(--red)' }}>{formatCurrency(sumOut)}</div>
-          </div>
-          <div>
-            <div className="money-flow-label">Net</div>
-            <div className="money-flow-value" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatSigned(net)}</div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 24 }}>
-          <div className="daily-spending-header">
-            <span className="money-flow-label">Daily spending</span>
-            <span style={{ font: '500 10.5px/1 var(--font-num)', color: hasDailyBudget ? 'var(--accent)' : 'var(--muted)' }}>
-              {hasDailyBudget ? `Budget ${formatCurrency(dailyBudget)}/day` : 'No daily budget'}
-            </span>
-          </div>
-          <div className="bar-chart">
-            {hasDailyBudget && (
-              <div className="budget-line" style={{ bottom: `${Math.min(98, budgetPct)}%` }} />
-            )}
-            {dailyBars.map((bar, i) => (
-              <div
-                key={i}
-                className="bar-chart-bar"
-                style={{ height: `${bar.height}%`, background: bar.bg, opacity: bar.opacity }}
-              />
-            ))}
-          </div>
-          <div className="bar-chart-footer">
-            <span>{monthLabel(month).split(' ')[0]} 1</span>
-            <span>{monthLabel(month).split(' ')[0]} {totalDays}</span>
-          </div>
-        </div>
-      </div>
-
       <div className="two-col-grid">
         <div className="card" style={{ marginBottom: 0 }}>
           <h2 style={{ margin: '0 0 18px', font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>Top spending</h2>
@@ -570,7 +551,56 @@ export default function DashboardPage() {
 
       <div className="card-row" style={{ marginTop: 30, marginBottom: 12 }}>
         <h2 style={{ margin: 0, font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>Breakdown</h2>
-        <BreakdownControls mode={breakdownMode} onModeChange={setBreakdownMode} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <MonthSwitcher month={selectedMonth} onChange={setSelectedMonth} />
+          <BreakdownControls mode={breakdownMode} onModeChange={setBreakdownMode} />
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-row">
+          <h2>Monthly insights</h2>
+          <span className="pill-tag">Savings rate {savingsRate}%</span>
+        </div>
+        <div className="money-flow-grid">
+          <div>
+            <div className="money-flow-label">Money in</div>
+            <div className="money-flow-value" style={{ color: 'var(--green)' }}>{formatCurrency(sumIn)}</div>
+          </div>
+          <div>
+            <div className="money-flow-label">Money out</div>
+            <div className="money-flow-value" style={{ color: 'var(--red)' }}>{formatCurrency(sumOut)}</div>
+          </div>
+          <div>
+            <div className="money-flow-label">Net</div>
+            <div className="money-flow-value" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatSigned(net)}</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 24 }}>
+          <div className="daily-spending-header">
+            <span className="money-flow-label">Daily spending</span>
+            <span style={{ font: '500 10.5px/1 var(--font-num)', color: hasDailyBudget ? 'var(--accent)' : 'var(--muted)' }}>
+              {hasDailyBudget ? `Budget ${formatCurrency(dailyBudget)}/day` : 'No daily budget'}
+            </span>
+          </div>
+          <div className="bar-chart">
+            {hasDailyBudget && (
+              <div className="budget-line" style={{ bottom: `${Math.min(98, budgetPct)}%` }} />
+            )}
+            {dailyBars.map((bar, i) => (
+              <div
+                key={i}
+                className="bar-chart-bar"
+                style={{ height: `${bar.height}%`, background: bar.bg, opacity: bar.opacity }}
+              />
+            ))}
+          </div>
+          <div className="bar-chart-footer">
+            <span>{monthLabel(selectedMonth).split(' ')[0]} 1</span>
+            <span>{monthLabel(selectedMonth).split(' ')[0]} {totalDays}</span>
+          </div>
+        </div>
       </div>
 
       <div className="page-eyebrow">Spending</div>
