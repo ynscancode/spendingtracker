@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "smoke-test": "node src/scripts/smokeTest.js",
-    "import-smoke-test": "node src/scripts/importSmokeTest.js"
+    "import-smoke-test": "node src/scripts/importSmokeTest.js",
+    "import-llm-test": "node src/scripts/importLlmTest.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
   "dependencies": {
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "multer": "^2.0.1",
     "xlsx": "^0.18.5"

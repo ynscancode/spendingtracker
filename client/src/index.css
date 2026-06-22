@@ -1644,3 +1644,59 @@ td {
   font: 600 14px/1.2 var(--font-ui);
   color: var(--green);
 }
+
+.import-ai-suggest {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.import-ai-suggest-btn {
+  font-size: 13px;
+}
+
+.import-ai-suggest-note {
+  font: 400 12.5px/1.3 var(--font-ui);
+  color: var(--muted);
+}
+
+.import-ai-consent-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.import-ai-consent-panel {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.import-ai-consent-block {
+  font: 400 12.5px/1.4 var(--font-ui);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+
+.import-ai-consent-table-wrap {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}

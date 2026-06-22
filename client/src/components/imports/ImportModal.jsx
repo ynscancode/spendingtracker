@@ -9,6 +9,7 @@ import { guessColumnMapping } from './guessColumnMapping.js'
 import { STEPS, STEP_LABELS } from './importWizardSteps.js'
 import Step1Upload from './Step1Upload.jsx'
 import Step2Columns from './Step2Columns.jsx'
+import ImportSuggestAI from './ImportSuggestAI.jsx'
 import Step3Values from './Step3Values.jsx'
 import { buildInitialAccountMapping, buildInitialCategoryMapping } from './buildInitialMappings.js'
 import Step4Review from './Step4Review.jsx'
@@ -35,6 +36,12 @@ function initialState() {
     },
     categoryMapping: new Map(),
     accountMapping: new Map(),
+    // Raw category/account suggestion arrays from a successful AI suggestion,
+    // held here only until proceedToValues() consumes them into the Maps
+    // above (the same seam buildInitialCategoryMapping/buildInitialAccountMapping
+    // feed) — never read by anything downstream of Step 3.
+    aiCategorySuggestion: null,
+    aiAccountSuggestion: null,
     baseDrafts: [], // unmerged, one per file row, stable `row-${rowIndex}` keys —
     // this is where user edits/exclusions in Review are applied. Populated
     // entering Review; never holds a merged transfer entry.
@@ -158,6 +165,28 @@ export default function ImportModal({ onClose, onImported }) {
     setState((s) => ({ ...s, accountMapping: next }))
   }
 
+  // Handles a successful AI suggestion (ImportSuggestAI.onResult) or its
+  // null/failure case. This is the ONLY place an AI suggestion touches
+  // state — it writes into the exact same prefill seams the deterministic
+  // path uses (columnMapping for Step 2, the raw arrays consumed by
+  // proceedToValues for Step 3's Maps), never anything downstream of Step 3.
+  function applyAiSuggestion(suggestion) {
+    if (!suggestion) return // silent fallback — deterministic prefill already in place, untouched
+    setState((s) => ({
+      ...s,
+      columnMapping: {
+        ...s.columnMapping,
+        ...suggestion.columnMapping,
+        // The LLM contract never proposes fixedAccountId (whole-file-fixed-
+        // account is a deterministic/manual-only concept) — keep whatever
+        // the wizard already has rather than letting it be clobbered.
+        fixedAccountId: s.columnMapping.fixedAccountId,
+      },
+      aiCategorySuggestion: suggestion.categoryMapping,
+      aiAccountSuggestion: suggestion.accountMapping,
+    }))
+  }
+
   function proceedToValues() {
     setState((s) => {
       const rawCategories = [...new Set(
@@ -166,8 +195,18 @@ export default function ImportModal({ onClose, onImported }) {
       const rawAccounts = [...new Set(
         s.rows.map((r) => (s.columnMapping.accountCol != null ? String(r[s.columnMapping.accountCol] ?? '').trim() : '')).filter(Boolean)
       )]
-      const categoryMapping = s.categoryMapping.size > 0 ? s.categoryMapping : buildInitialCategoryMapping(rawCategories, [...outgoingNames, ...incomingNames])
-      const accountMapping = s.accountMapping.size > 0 ? s.accountMapping : buildInitialAccountMapping(rawAccounts)
+      const categoryMapping =
+        s.categoryMapping.size > 0
+          ? s.categoryMapping
+          : s.aiCategorySuggestion
+          ? new Map(s.aiCategorySuggestion.map((c) => [c.raw, { name: c.name, list: c.list, isNew: c.isNew }]))
+          : buildInitialCategoryMapping(rawCategories, [...outgoingNames, ...incomingNames])
+      const accountMapping =
+        s.accountMapping.size > 0
+          ? s.accountMapping
+          : s.aiAccountSuggestion
+          ? new Map(s.aiAccountSuggestion.map((a) => [a.raw, a.accountId]))
+          : buildInitialAccountMapping(rawAccounts)
       return { ...s, categoryMapping, accountMapping, stepIndex: STEPS.indexOf('values') }
     })
   }
@@ -294,7 +333,15 @@ export default function ImportModal({ onClose, onImported }) {
           {step === 'upload' && <Step1Upload onParsed={handleParsed} />}
 
           {step === 'columns' && (
-            <Step2Columns headers={state.headers} mapping={state.columnMapping} onChange={setColumnMapping} />
+            <>
+              <ImportSuggestAI
+                headers={state.headers}
+                rows={state.rows}
+                columnMapping={state.columnMapping}
+                onResult={applyAiSuggestion}
+              />
+              <Step2Columns headers={state.headers} mapping={state.columnMapping} onChange={setColumnMapping} />
+            </>
           )}
 
           {step === 'values' && (

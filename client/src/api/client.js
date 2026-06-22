@@ -59,4 +59,5 @@ export const api = {
     return requestFormData('POST', '/imports/parse', fd);
   },
   commitImport: (payload) => request('POST', '/imports/commit', payload),
+  suggestImportMapping: (payload) => request('POST', '/imports/suggest', payload),
 };
