@@ -12,10 +12,12 @@
      tabular-nums ")" glyph at the balance column's font sizes. */
   --balance-paren-w: 0.6em;
 
-  /* Fixed-width gutter reserved to the right of the OUT-column amount for
+  /* Fixed-width gutter reserved to the left of the OUT-column amount for
      the optional spend-warning dot (see .amount-with-flag /
      .spend-warning-dot-slot) — always reserved, present or not, so the
-     dot's presence never shifts the amount's digits left. Sized to the
+     dot's presence never shifts the amount's digits, and the amount's
+     right edge always lands flush with the cell's right edge (matching
+     the day-total row, which has no trailing gutter). Sized to the
      dot's own width (8px) plus its gap from the amount (6px). */
   --spend-dot-gutter-w: 14px;
 
@@ -495,11 +497,73 @@ select {
   pointer-events: none;
 }
 
-.bar-chart-bar {
+.bar-chart-bar-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.bar-chart-bar {
+  width: 100%;
   border-radius: 2px 2px 0 0;
   transition: height 0.4s ease;
+}
+
+.bar-chart-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  z-index: 5;
+  min-width: 150px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.bar-chart-bar-wrap:hover .bar-chart-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.bar-chart-tooltip-day {
+  font: 600 var(--font-xs)/1.2 var(--font-num);
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.bar-chart-tooltip-total {
+  font: 600 var(--font-xs)/1.3 var(--font-num);
+  color: var(--text);
+}
+
+.bar-chart-tooltip-biggest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font: 500 var(--font-xs)/1.3 var(--font-num);
+  color: var(--muted);
+}
+
+.bar-chart-tooltip-empty {
+  color: var(--faint);
+}
+
+.bar-chart-tooltip-swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .bar-chart-footer {
@@ -591,14 +655,6 @@ select {
   flex: none;
 }
 
-.activity-category {
-  font: 500 12px/1.2 var(--font-ui);
-  color: var(--text);
-  text-transform: capitalize;
-  flex: none;
-  white-space: nowrap;
-}
-
 .activity-main {
   flex: 1;
   min-width: 0;
@@ -643,19 +699,6 @@ select {
 .filter-strip-label {
   font: 600 11px/1 var(--font-num);
   letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.filter-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.filter-field-label {
-  font: 600 10.5px/1 var(--font-num);
-  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -760,12 +803,15 @@ td {
   background: color-mix(in oklab, var(--surface-2) 50%, transparent);
 }
 
-/* The OUT cell's amount + spend-warning dot. The dot gutter is always
+/* The OUT cell's spend-warning dot + amount. The dot gutter is always
    reserved at a fixed width (--spend-dot-gutter-w) regardless of whether a
    dot is rendered, so the amount's last digit lands at the same x-position
-   whether or not this row has a warning dot. The amount itself additionally
-   reserves the accounting-paren gutter (.accounting-amount) so the
-   right-to-left layout is: [digits][")" gutter][dot gutter]. */
+   whether or not this row has a warning dot — and matches the day-total
+   row's amount, which has nothing after it. The dot gutter sits before the
+   amount (left of it); justify-content: flex-end packs the slot+amount pair
+   against the cell's right edge with the amount last, so the amount's own
+   right edge (plus its accounting-paren gutter, .accounting-amount) is
+   flush with the cell's right edge: [dot gutter][digits][")" gutter]. */
 .amount-with-flag {
   display: inline-flex;
   align-items: center;
@@ -1307,11 +1353,19 @@ td {
   color: var(--text);
 }
 
-.month-switcher-label {
+.month-switcher-input {
   font: 600 14px/1 var(--font-ui);
   color: var(--text);
   min-width: 130px;
   text-align: center;
+  background: transparent;
+  border: none;
+  padding: 6px 4px;
+  border-radius: 6px;
+}
+
+.month-switcher-input:hover {
+  background: var(--surface-2);
 }
 
 .budget-row {

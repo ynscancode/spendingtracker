@@ -8,9 +8,7 @@ import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 import { fillColorFor, suffixFor } from '../utils/budgetHealth.js'
 
 // Budget health classification shared by the editing list and the chart.
-// unset budgets are excluded from over/near math entirely (no health at all).
 function healthFor(actual, budget) {
-  if (budget == null) return 'unset'
   if (budget === 0) return actual > 0 ? 'over' : 'under'
   const pct = (actual / budget) * 100
   if (pct > 100) return 'over'
@@ -57,18 +55,13 @@ export default function BudgetPage() {
 
   const rows = outgoing.map(({ name: category }) => {
     const actual = actualsMap[category] || 0
-    const budget = Object.prototype.hasOwnProperty.call(budgetsByCategory, category)
-      ? budgetsByCategory[category]
-      : null
+    const budget = budgetsByCategory[category] ?? 0
     return { category, actual, budget, health: healthFor(actual, budget), color: colorFor(ACCOUNTS.SPENDING, category) }
   })
 
-  const maxActual = Math.max(1, ...rows.map((r) => r.actual))
-
   async function commitBudget(category, rawValue) {
     const value = rawValue.trim()
-    if (value === '') return
-    const amount = Number(value)
+    const amount = value === '' ? 0 : Number(value)
     if (Number.isNaN(amount) || amount < 0) {
       setRowErrors((prev) => ({ ...prev, [category]: 'Enter an amount of 0 or more.' }))
       return
@@ -78,28 +71,6 @@ export default function BudgetPage() {
     try {
       await api.setBudget({ month, category, amount })
       setBudgetsByCategory((prev) => ({ ...prev, [category]: amount }))
-      setDrafts((prev) => {
-        const next = { ...prev }
-        delete next[category]
-        return next
-      })
-    } catch (err) {
-      setRowErrors((prev) => ({ ...prev, [category]: err.message }))
-    } finally {
-      setSavingCategory(null)
-    }
-  }
-
-  async function handleClear(category) {
-    setSavingCategory(category)
-    setRowErrors((prev) => ({ ...prev, [category]: null }))
-    try {
-      await api.clearBudget({ month, category })
-      setBudgetsByCategory((prev) => {
-        const next = { ...prev }
-        delete next[category]
-        return next
-      })
       setDrafts((prev) => {
         const next = { ...prev }
         delete next[category]
@@ -128,15 +99,13 @@ export default function BudgetPage() {
         </div>
         {rows.map((row) => {
           const draftValue = drafts[row.category]
-          const inputValue = draftValue !== undefined ? draftValue : (row.budget != null ? String(row.budget) : '')
+          const inputValue = draftValue !== undefined ? draftValue : String(row.budget)
           const suffix = suffixFor(row.health)
           const isSaving = savingCategory === row.category
           const rowError = rowErrors[row.category]
           const inputId = `budget-input-${row.category}`
 
-          const headValueText = row.budget != null
-            ? `${formatCurrency(row.actual)} of ${formatCurrency(row.budget)}`
-            : `${formatCurrency(row.actual)} spent`
+          const headValueText = `${formatCurrency(row.actual)} of ${formatCurrency(row.budget)}`
 
           return (
             <div className="budget-row" key={row.category}>
@@ -155,27 +124,15 @@ export default function BudgetPage() {
               </div>
 
               <div className="budget-row-bars">
-                {row.budget != null ? (
-                  <div className="cat-bar-track">
-                    <div
-                      className="cat-bar-fill"
-                      style={{
-                        width: `${row.budget > 0 ? Math.min(100, Math.round((row.actual / row.budget) * 100)) : (row.actual > 0 ? 100 : 0)}%`,
-                        background: fillColorFor(row.health),
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <div className="cat-bar-track">
-                      <div
-                        className="cat-bar-fill"
-                        style={{ width: `${Math.max(3, Math.round((row.actual / maxActual) * 100))}%`, background: 'var(--accent)' }}
-                      />
-                    </div>
-                    <span className="cell-faint budget-no-budget-tag">No budget set</span>
-                  </>
-                )}
+                <div className="cat-bar-track">
+                  <div
+                    className="cat-bar-fill"
+                    style={{
+                      width: `${row.budget > 0 ? Math.min(100, Math.round((row.actual / row.budget) * 100)) : (row.actual > 0 ? 100 : 0)}%`,
+                      background: fillColorFor(row.health),
+                    }}
+                  />
+                </div>
               </div>
 
               <div className="budget-row-input">
@@ -198,17 +155,6 @@ export default function BudgetPage() {
                     }
                   }}
                 />
-                {row.budget != null && (
-                  <button
-                    type="button"
-                    className="btn-sm btn-sm-delete"
-                    aria-label={`Clear budget for ${row.category}`}
-                    disabled={isSaving}
-                    onClick={() => handleClear(row.category)}
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
               {rowError && <span className="error-text" role="alert">{rowError}</span>}
             </div>

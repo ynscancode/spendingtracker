@@ -9,13 +9,13 @@
 -- same picker (system categories are excluded from user-facing CRUD/pickers entirely), so
 -- this is not a user-visible collision.
 --
--- 'miscellaneous' (new outgoing, non-system) cannot take a palette slot since all 8 are
--- already used by the seeds above. Per ADR-023 Decision 3, its color is derived via the
--- deterministic name-hash -> HSL -> hex fallback (32-bit JS string hash of the literal
--- name "miscellaneous" -> hue = |hash| % 360, fixed sat=55%, light=55% -> hex), then
--- FROZEN as a literal here rather than computed in SQL:
---   hash("miscellaneous") -> hue 46, sat 55%, light 55% -> #CBAE4D
--- Verified #CBAE4D does not exactly collide with any of the 8 palette hexes above.
+-- 'miscellaneous' (outgoing) and 'income'/'other' (incoming) sit outside the 8-slot
+-- palette but share the same hue-spacing scheme: every non-system, non-travel category's
+-- hue is 36 degrees from its neighbors (10 hues total, fixed sat=48%, light=58%), so no
+-- two read as the same color — see server/src/migrations/005_recolor_categories.sql,
+-- which re-applies this same scheme to any pre-existing dev DB seeded before this scheme
+-- existed (e.g. one where 'income' still equalled 'food' or 'transport'/'miscellaneous'
+-- were near-identical golds).
 CREATE TABLE categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -28,16 +28,16 @@ CREATE TABLE categories (
 CREATE UNIQUE INDEX idx_categories_name_list ON categories(lower(name), list);
 
 INSERT INTO categories (name, list, is_system, color) VALUES
-  ('food', 'outgoing', 0, '#CC785C'),
-  ('drinks', 'outgoing', 0, '#4FB3A7'),
-  ('transport', 'outgoing', 0, '#D4A24E'),
-  ('shopping', 'outgoing', 0, '#7C8CDE'),
-  ('alcohol', 'outgoing', 0, '#C06A9E'),
-  ('fun', 'outgoing', 0, '#5FA85A'),
-  ('bills', 'outgoing', 0, '#B4754A'),
+  ('food', 'outgoing', 0, '#C76060'),
+  ('drinks', 'outgoing', 0, '#60C7C7'),
+  ('transport', 'outgoing', 0, '#C79E60'),
+  ('shopping', 'outgoing', 0, '#7560C7'),
+  ('alcohol', 'outgoing', 0, '#B360C7'),
+  ('fun', 'outgoing', 0, '#75C760'),
+  ('bills', 'outgoing', 0, '#C7609E'),
   ('travel', 'outgoing', 0, '#8A8F98'),
-  ('miscellaneous', 'outgoing', 0, '#CBAE4D'),
+  ('miscellaneous', 'outgoing', 0, '#B3C760'),
   ('transfer-out', 'outgoing', 1, '#8A8F98'),
-  ('income', 'incoming', 0, '#CC785C'),
-  ('other', 'incoming', 0, '#4FB3A7'),
+  ('income', 'incoming', 0, '#608AC7'),
+  ('other', 'incoming', 0, '#60C78A'),
   ('transfer-in', 'incoming', 1, '#8A8F98');

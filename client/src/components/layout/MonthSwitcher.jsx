@@ -1,10 +1,10 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { monthLabel, prevMonthStr, nextMonthStr } from '../../utils/dateUtils.js'
+import { prevMonthStr, nextMonthStr } from '../../utils/dateUtils.js'
 
-// Reusable prev/next month stepper that lets the caller navigate to any
-// month, regardless of transaction history — used by BudgetPage, where every
-// month is editable (Overview, by contrast, is locked to the current month
-// and has no month picker at all).
+// Reusable month navigation control used across all three tabs (Overview,
+// Transactions, Budget): prev/next chevron buttons for stepping one month at
+// a time, plus a native month input in the middle for jumping directly to
+// any month, regardless of transaction history.
 export default function MonthSwitcher({ month, onChange }) {
   return (
     <div className="month-switcher">
@@ -16,7 +16,13 @@ export default function MonthSwitcher({ month, onChange }) {
       >
         <ChevronLeft size={16} />
       </button>
-      <span className="month-switcher-label" aria-live="polite">{monthLabel(month)}</span>
+      <input
+        type="month"
+        className="month-switcher-input"
+        value={month}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Select month"
+      />
       <button
         type="button"
         className="month-switcher-btn"

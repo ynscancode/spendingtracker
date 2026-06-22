@@ -50,8 +50,8 @@ function assertValidAccountId(accountId) {
   }
 }
 
-// Deterministic 32-bit string hash -> hue, matching the algorithm documented in
-// server/src/migrations/003_categories.sql (used to freeze 'miscellaneous'#CBAE4D).
+// Deterministic 32-bit string hash -> hue, used as the starting point for the
+// hue-distance search in assignColor() below.
 function hashNameToHue(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) {
@@ -71,24 +71,62 @@ function hslToHex(h, s, l) {
   return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`.toUpperCase();
 }
 
+function hexToHue(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d === 0) return 0;
+  let h;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h *= 60;
+  return h < 0 ? h + 360 : h;
+}
+
+function hueDistance(a, b) {
+  const diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+// Minimum hue separation (degrees) a new category's color must clear from every
+// color already in use on the same account, so categories stay visually distinct
+// at a glance (not just non-identical hex values).
+const MIN_HUE_DISTANCE = 30;
+const HUE_STEP = 37; // coprime with 360, so (baseHue + attempt*HUE_STEP) % 360 visits every hue once
+
 function assignColor(name, usedColors) {
   const usedSet = new Set(usedColors.map((c) => c.toUpperCase()));
   const freeSlot = PALETTE.find((c) => !usedSet.has(c.toUpperCase()));
   if (freeSlot) {
     return freeSlot;
   }
-  // All palette slots used: deterministic hash-of-name -> HSL -> hex, rotating
-  // hue on exact collision until a free hex is found.
+  // All palette slots used: search hue space (starting from a deterministic
+  // hash-of-name hue) for one at least MIN_HUE_DISTANCE from every used color's
+  // hue, tracking the best candidate seen in case the account is too crowded for
+  // any hue to clear the threshold (best-available fallback).
+  const usedHues = usedColors.map(hexToHue);
   const baseHue = hashNameToHue(name);
+  let bestHue = baseHue;
+  let bestMinDist = -1;
   for (let attempt = 0; attempt < 360; attempt += 1) {
-    const hue = (baseHue + attempt) % 360;
-    const hex = hslToHex(hue, 55, 55);
-    if (!usedSet.has(hex.toUpperCase())) {
-      return hex;
+    const hue = (baseHue + attempt * HUE_STEP) % 360;
+    const minDist = usedHues.length === 0 ? Infinity : Math.min(...usedHues.map((h) => hueDistance(hue, h)));
+    if (minDist > bestMinDist) {
+      bestMinDist = minDist;
+      bestHue = hue;
+    }
+    if (minDist >= MIN_HUE_DISTANCE) {
+      const hex = hslToHex(hue, 48, 58);
+      if (!usedSet.has(hex.toUpperCase())) {
+        return hex;
+      }
     }
   }
-  // Extremely unlikely fallback (would require 360 exact collisions).
-  return hslToHex(baseHue, 55, 55);
+  return hslToHex(bestHue, 48, 58);
 }
 
 export function listCategories(accountId) {
@@ -172,16 +210,7 @@ export function deleteCategory(id) {
 // account (excludes is_system, e.g. transfer-out).
 export function getOutgoingNames(accountId) {
   return db
-    .prepare("SELECT name FROM categories WHERE list = 'outgoing' AND is_system = 0 AND account_id = ?")
-    .all(Number(accountId))
-    .map((r) => r.name);
-}
-
-// Incoming category names a normal transaction may use for the given
-// account (excludes is_system, e.g. transfer-in).
-export function getIncomingNames(accountId) {
-  return db
-    .prepare("SELECT name FROM categories WHERE list = 'incoming' AND is_system = 0 AND account_id = ?")
+    .prepare("SELECT name FROM categories WHERE list = 'outgoing' AND is_system = 0 AND account_id = ? ORDER BY id")
     .all(Number(accountId))
     .map((r) => r.name);
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getBudgetsForMonth, setBudget, clearBudget, ValidationError } from '../services/budgetService.js';
+import { getBudgetsForMonth, setBudget, ValidationError } from '../services/budgetService.js';
 
 const router = Router();
 
@@ -28,16 +28,6 @@ router.put('/', (req, res) => {
   try {
     const result = setBudget(req.body);
     res.json(result);
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-router.delete('/', (req, res) => {
-  try {
-    const { month, category } = req.query;
-    clearBudget({ month, category });
-    res.status(204).send();
   } catch (err) {
     handleError(res, err);
   }

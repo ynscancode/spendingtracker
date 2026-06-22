@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
-import { formatCurrency, formatSigned } from '../utils/format.js'
+import { formatCurrency, formatSigned, formatOutflow } from '../utils/format.js'
 import { computeDailyInsights } from '../utils/insights.js'
-import { ACCOUNTS, ACCOUNT_NAMES } from '../constants/categories.js'
+import { ACCOUNTS } from '../constants/categories.js'
 import { useDailyBudget } from '../hooks/useDailyBudget.js'
 import { useCategories } from '../contexts/categories.js'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
@@ -259,9 +259,19 @@ export default function DashboardPage() {
   // insights), not the page's current month.
   const breakdownRealOut = scopedBreakdownTransactions.filter((t) => t.direction === 'out' && !t.is_transfer)
   const dayMap = {}
+  // Tracks each day's biggest single purchase (amount + category + color)
+  // alongside the running total above. breakdownRealOut is already scoped
+  // to scopeAccountId (Spending) via scopedBreakdownTransactions, so using
+  // the transaction's own account_id here resolves to the same account —
+  // just routed through colorFor for consistency with the rest of the file.
+  const dayBiggestMap = {}
   breakdownRealOut.forEach((t) => {
     const d = Number(t.date.slice(8, 10))
     dayMap[d] = (dayMap[d] || 0) + t.amount
+    const current = dayBiggestMap[d]
+    if (!current || t.amount > current.amount) {
+      dayBiggestMap[d] = { amount: t.amount, category: t.category, color: colorFor(t.account_id, t.category) }
+    }
   })
   const totalDays = daysInMonth(selectedMonth)
   // When no daily budget is set, scale off actual max spend only — no
@@ -277,12 +287,13 @@ export default function DashboardPage() {
     const over = hasDailyBudget && v > dailyBudget
     const bg = v > 0 ? (over ? 'var(--red)' : 'var(--accent)') : 'var(--surface-2)'
     const opacity = v > 0 ? 0.55 + 0.45 * (v / maxDay) : 1
-    return { height: h, bg, opacity }
+    return { height: h, bg, opacity, total: v, biggest: dayBiggestMap[i + 1] || null, day: i + 1 }
   })
 
   // Budget summary is Spending-only — budgeting doesn't apply to Savings.
-  // Only SET budgets count toward totals/percent (unset categories are
-  // excluded from both budgeted and spent sides per spec).
+  // The budgets array now always contains every Spending outgoing category
+  // (0-defaulted where the user never set one), so summing it covers all
+  // categories without any gap-filling.
   const spendingRealOut = monthTransactions.filter((t) => t.account_id === ACCOUNTS.SPENDING && t.direction === 'out' && !t.is_transfer)
   const catActualsMap = {}
   spendingRealOut.forEach((t) => { catActualsMap[t.category] = (catActualsMap[t.category] || 0) + t.amount })
@@ -362,7 +373,7 @@ export default function DashboardPage() {
 
       <div className="card">
         <div className="card-row">
-          <h2>Daily insights</h2>
+          <h2>{dayLabel(today)}</h2>
           {editingBudget ? (
             <div className="daily-budget-editor">
               <label className="visually-hidden" htmlFor="daily-budget-input">Daily budget</label>
@@ -435,7 +446,7 @@ export default function DashboardPage() {
             <div className="stat-tile-label">Total budgeted</div>
             <div className="stat-tile-value">{formatCurrency(totalBudgeted)}</div>
             <div className="stat-tile-note" style={{ color: 'var(--muted)' }}>
-              {budgetRows.length} of {outgoingFor(ACCOUNTS.SPENDING).length} categories set
+              Across {budgetRows.length} categories
             </div>
           </div>
           <div className="stat-tile">
@@ -447,14 +458,14 @@ export default function DashboardPage() {
               {formatCurrency(totalSpentBudgeted)}
             </div>
             <div className="stat-tile-note" style={{ color: totalBudgeted > 0 ? 'var(--muted)' : 'var(--faint)' }}>
-              {totalBudgeted > 0 ? `${budgetUsedPct}% of budget` : 'No budgets set yet'}
+              {totalBudgeted > 0 ? `${budgetUsedPct}% of budget` : 'No budget to compare'}
             </div>
           </div>
         </div>
 
-        {budgetRows.length === 0 ? (
+        {outgoingFor(ACCOUNTS.SPENDING).length === 0 ? (
           <p className="empty-text" style={{ marginTop: 16 }}>
-            No budgets set for {monthLabel(month)}. Go to the Budget tab to set one.
+            No Spending categories to budget yet.
           </p>
         ) : (
           <div style={{ marginTop: 16 }}>
@@ -494,8 +505,8 @@ export default function DashboardPage() {
       <div className="card-grid">
         <div className="balance-card">
           <div className="balance-card-label">
-            <span className="balance-card-dot" style={{ background: scopeAccountId === ACCOUNTS.SAVINGS ? 'var(--topup)' : 'var(--accent)' }} />
-            {ACCOUNT_NAMES[scopeAccountId]}
+            <span className="balance-card-dot" style={{ background: 'var(--accent)' }} />
+            Spending balance
           </div>
           <div className="balance-card-value">{formatCurrency(scopedBal)}</div>
           <div className={`balance-card-delta ${scopedDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
@@ -538,7 +549,6 @@ export default function DashboardPage() {
           ) : recent.map((r) => (
             <div className="activity-row" key={r.id}>
               <span className="activity-dot" style={{ background: r.color }} />
-              <span className="activity-category">{r.category}</span>
               <div className="activity-main">
                 <div className="activity-comment">{r.comment}</div>
                 <div className="activity-meta">{r.meta}</div>
@@ -591,9 +601,25 @@ export default function DashboardPage() {
             {dailyBars.map((bar, i) => (
               <div
                 key={i}
-                className="bar-chart-bar"
-                style={{ height: `${bar.height}%`, background: bar.bg, opacity: bar.opacity }}
-              />
+                className="bar-chart-bar-wrap"
+              >
+                <div
+                  className="bar-chart-bar"
+                  style={{ height: `${bar.height}%`, background: bar.bg, opacity: bar.opacity }}
+                />
+                <div className="bar-chart-tooltip" role="tooltip">
+                  <div className="bar-chart-tooltip-day">{monthLabel(selectedMonth).split(' ')[0]} {bar.day}</div>
+                  <div className="bar-chart-tooltip-total">{formatOutflow(bar.total)} spent</div>
+                  {bar.biggest ? (
+                    <div className="bar-chart-tooltip-biggest">
+                      <span className="bar-chart-tooltip-swatch" style={{ background: bar.biggest.color }} />
+                      Biggest: {formatOutflow(bar.biggest.amount)} · {bar.biggest.category}
+                    </div>
+                  ) : (
+                    <div className="bar-chart-tooltip-biggest bar-chart-tooltip-empty">No purchases</div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
           <div className="bar-chart-footer">

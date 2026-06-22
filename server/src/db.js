@@ -46,6 +46,15 @@ function runMigrations() {
     const sql = fs.readFileSync(migrationPath, 'utf8');
     db.exec(sql);
   }
+
+  const hasOldSeedColor = db
+    .prepare("SELECT 1 FROM categories WHERE is_system = 0 AND name = 'food' AND color = '#CC785C'")
+    .get();
+  if (hasOldSeedColor) {
+    const migrationPath = path.join(__dirname, 'migrations', '005_recolor_categories.sql');
+    const sql = fs.readFileSync(migrationPath, 'utf8');
+    db.exec(sql);
+  }
 }
 
 runMigrations();

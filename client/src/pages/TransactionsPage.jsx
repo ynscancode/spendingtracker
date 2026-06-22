@@ -3,6 +3,7 @@ import { api } from '../api/client.js'
 import TransactionList from '../components/transactions/TransactionList.jsx'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
 import ImportModal from '../components/imports/ImportModal.jsx'
+import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 import { currentMonthStr, monthRangeFor, monthLabel } from '../utils/dateUtils.js'
 import { formatCurrency } from '../utils/format.js'
 import { ACCOUNT_NAMES } from '../constants/categories.js'
@@ -94,10 +95,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="filter-strip">
-        <label className="filter-field">
-          <span className="filter-field-label">Month</span>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </label>
+        <MonthSwitcher month={month} onChange={setMonth} />
         <span className="filter-strip-label">Account</span>
         <div className="pill-group">
           {ACCOUNT_FILTERS.map(([id, name]) => (

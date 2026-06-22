@@ -35,9 +35,16 @@ function assertValidAmount(amount) {
 
 export function getBudgetsForMonth(month) {
   assertValidMonth(month);
-  return db
-    .prepare('SELECT category, amount FROM budgets WHERE month = @month ORDER BY category')
+
+  const rows = db
+    .prepare('SELECT category, amount FROM budgets WHERE month = @month')
     .all({ month });
+  const byCategory = new Map(rows.map((row) => [row.category, row.amount]));
+
+  return getBudgetableNames(ACCOUNTS.SPENDING).map((category) => ({
+    category,
+    amount: byCategory.get(category) ?? 0,
+  }));
 }
 
 export function setBudget({ month, category, amount }) {
@@ -52,13 +59,6 @@ export function setBudget({ month, category, amount }) {
   `).run({ month, category, amount });
 
   return { month, category, amount };
-}
-
-export function clearBudget({ month, category }) {
-  assertValidMonth(month);
-  assertValidCategory(category);
-
-  db.prepare('DELETE FROM budgets WHERE month = @month AND category = @category').run({ month, category });
 }
 
 export { ValidationError };

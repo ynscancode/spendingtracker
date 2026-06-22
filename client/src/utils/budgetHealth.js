@@ -1,13 +1,12 @@
 // Shared presentational helpers for budget-health classification
-// ('under' / 'near' / 'over' / 'unset'), used by both the Budget page's
-// editing list and the Overview Budget card's comparison list so the two
-// stay visually consistent.
+// ('under' / 'near' / 'over'), used by both the Budget page's editing list
+// and the Overview Budget card's comparison list so the two stay visually
+// consistent.
 
 export function fillColorFor(health) {
   if (health === 'over') return 'var(--red)'
   if (health === 'near') return 'var(--warning)'
-  if (health === 'under') return 'var(--green)'
-  return 'var(--accent)' // unset
+  return 'var(--green)' // under
 }
 
 // Non-color text cue for near/over, matching the highlight.js convention of

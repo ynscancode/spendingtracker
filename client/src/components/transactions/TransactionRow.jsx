@@ -39,7 +39,6 @@ function ReadRow({ txn, onEdit, onDelete }) {
       <td className={`col-amount ${txn.direction === 'out' ? 'cell-out' : 'cell-faint'}`}>
         {txn.direction === 'out' ? (
           <span className="amount-with-flag">
-            <AccountingValue text={formatOutflow(txn.amount)} />
             <span className="spend-warning-dot-slot">
               {dotClass && (
                 <span
@@ -50,6 +49,7 @@ function ReadRow({ txn, onEdit, onDelete }) {
                 />
               )}
             </span>
+            <AccountingValue text={formatOutflow(txn.amount)} />
           </span>
         ) : '—'}
       </td>
