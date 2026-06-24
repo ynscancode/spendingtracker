@@ -5,11 +5,33 @@ import { bestMatch } from '../../utils/fuzzyMatch.js'
 const HEADER_ALIASES = {
   date: ['date', 'transaction date', 'posted date', 'posting date', 'trans date'],
   amount: ['amount', 'value', 'transaction amount', 'total'],
-  debit: ['debit', 'withdrawal', 'money out', 'out', 'expense'],
-  credit: ['credit', 'deposit', 'money in', 'in', 'income'],
+  // 'dr' added for the common bank-export header "Dr" (debit). Collision
+  // check: 'dr' is a single short token, so it only hard-matches via
+  // containsTokenSequence when a header's token list contains "dr" as an
+  // exact element (e.g. "Dr" -> ["dr"], or "Dr Amount" -> ["dr","amount"]).
+  // It does NOT match "Doctor" (-> ["doctor"], a single different token —
+  // "doctor" !== "dr") or any other header that merely contains the
+  // substring "dr", since matching is token-exact, not substring. No
+  // collision found against credit/direction/category/comment/account's
+  // alias lists (verified by trace — see TEAM-BOARD).
+  debit: ['debit', 'withdrawal', 'money out', 'out', 'expense', 'dr'],
+  // 'cr' added for the common bank-export header "Cr" (credit). Same
+  // token-exact collision reasoning as 'dr' above — only matches a header
+  // whose token list contains the exact token "cr".
+  credit: ['credit', 'deposit', 'money in', 'in', 'income', 'cr'],
   direction: ['direction', 'type', 'in/out', 'debit/credit'],
-  category: ['category', 'cat', 'type of expense', 'tag'],
-  comment: ['comment', 'note', 'notes', 'description', 'memo', 'details'],
+  // Note: deliberately no bare "type"-suffixed aliases here (e.g. "spend
+  // type", "transaction type") — direction's alias list already contains
+  // the bare token "type", so any "X type" header would match BOTH roles
+  // via containsTokenSequence and collide (the same column would get
+  // assigned to categoryCol AND directionCol). "type of expense"/"expense
+  // category" survive because they contain "of"/"category" between the
+  // tokens, so they don't reduce to a bare "type" run.
+  category: ['category', 'cat', 'type of expense', 'tag', 'classification', 'label', 'expense category'],
+  // 'narration', 'particulars', 'remarks' added for common bank-export
+  // transaction-description headers (UK/Indian-style exports commonly use
+  // these instead of "description"/"comment").
+  comment: ['comment', 'note', 'notes', 'description', 'memo', 'details', 'narration', 'particulars', 'remarks'],
   account: ['account', 'account name', 'wallet', 'source'],
 };
 

@@ -2,6 +2,57 @@
 // transfer-detection pipeline. No React, no API calls — everything here
 // operates on plain data so it's easy to unit-reason-about and test.
 
+// Sentinel category name used whenever a row has no resolved category — no
+// category column mapped at all, or a mapped column whose cell is blank
+// (product-owner DECISION 1). Exactly "Uncategorized" (<=30 chars, not in
+// RESERVED_NAMES) so categoryService.createCategory accepts it as an
+// ordinary, account+list-scoped, non-system category like any other.
+export const UNCATEGORIZED = 'Uncategorized';
+
+// Case-insensitive collapse of a column's raw cell values down to one entry
+// per distinct value, first-seen casing kept as the representative string.
+// Shared by Step3Values.jsx (the DISPLAY layer — one row per unique value)
+// and ImportModal.jsx's proceedToValues (the SEED layer — the array handed
+// to buildInitialCategoryMapping/buildInitialAccountMapping to build the
+// initial Maps). Both layers MUST use this exact same function rather than
+// independently-written equivalents: if the seed layer collapsed casing
+// differently (or not at all), a brand-new "+ Create new" category spelled
+// with inconsistent casing across rows (e.g. "NewCat" / "newcat") would seed
+// TWO separate categoryMapping entries with two different isNew names —
+// commitImport's categoriesToCreate dedupes by lowercased name and creates
+// only ONE row, but the transaction drafts still carry the other casing
+// verbatim, which categoryService's case-SENSITIVE match then rejects,
+// rolling back the whole atomic commit batch. Collapsing once, here, with
+// one casing surviving into the Map key categoryMapping/accountMapping are
+// built from, is what keeps the seed/display/lookup layers consistent:
+// getCI() below resolves any row's casing back to this same single key.
+export function uniqueValues(rows, colIndex) {
+  if (colIndex == null) return [];
+  const seen = new Map(); // lowerKey -> firstSeenOriginal
+  for (const row of rows) {
+    const value = String(row[colIndex] ?? '').trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (!seen.has(key)) seen.set(key, value);
+  }
+  return [...seen.values()];
+}
+
+// Case-insensitive Map lookup: tries an exact key match first (the common,
+// fast case), then falls back to a case-insensitive scan. Used for both
+// account and category raw-value resolution so collapsing uniqueValues()
+// case-insensitively (Fix 5) stays consistent with how buildDraftTransactions
+// resolves each row — a row whose casing differs from the first-seen casing
+// Step 3 displayed would otherwise miss the Map and get wrongly flagged.
+function getCI(map, raw) {
+  if (map.has(raw)) return map.get(raw);
+  const lower = String(raw).toLowerCase();
+  for (const [k, v] of map) {
+    if (String(k).toLowerCase() === lower) return v;
+  }
+  return undefined;
+}
+
 // ---------- Date parsing ----------
 
 // Two-digit-year pivot: 00-68 -> 2000-2068, 69-99 -> 1969-1999 (matches the
@@ -225,7 +276,7 @@ export function buildDraftTransactions(rows, columnMapping, categoryMapping, acc
     const rawAccountLabel = columnMapping.accountCol != null ? String(row[columnMapping.accountCol] ?? '').trim() : '';
     let accountId = null;
     if (columnMapping.accountCol != null) {
-      const mapped = accountMapping.get(rawAccountLabel);
+      const mapped = getCI(accountMapping, rawAccountLabel);
       if (mapped == null) {
         issues.push(`Account "${rawAccountLabel}" is not mapped.`);
       } else {
@@ -237,17 +288,31 @@ export function buildDraftTransactions(rows, columnMapping, categoryMapping, acc
       issues.push('No account column or fixed account configured.');
     }
 
+    // Category resolution (product-owner DECISION 1 + DECISION 2):
+    //   - no category column at all -> Uncategorized, never flagged.
+    //   - column mapped but this row's cell is blank -> Uncategorized, never
+    //     flagged (product-equivalent to "no column"; flagging one but not
+    //     the other would be an inconsistent, confusing distinction).
+    //   - column mapped, cell non-blank, but no resolved mapping (user
+    //     removed/never set its Step-3 mapping, or it's an unresolved
+    //     numeric code per Fix 4) -> hard flag. This is "user gave us a
+    //     value and we don't know what to do with it" — still a real error.
+    // category is therefore a non-empty string in every non-flagged case,
+    // and null ONLY in the hard-flag branch — revalidateBaseDraft's
+    // `d.category == null` check depends on exactly this invariant.
     const rawCategory = columnMapping.categoryCol != null ? String(row[columnMapping.categoryCol] ?? '').trim() : '';
     let category = null;
-    if (rawCategory) {
-      const mapped = categoryMapping.get(rawCategory);
-      if (mapped == null) {
+    if (columnMapping.categoryCol == null) {
+      category = UNCATEGORIZED;
+    } else if (!rawCategory) {
+      category = UNCATEGORIZED;
+    } else {
+      const mapped = getCI(categoryMapping, rawCategory);
+      if (mapped == null || mapped.name == null) {
         issues.push(`Category "${rawCategory}" is not mapped.`);
       } else {
         category = mapped.name;
       }
-    } else {
-      issues.push('Category is blank.');
     }
 
     const comment = columnMapping.commentCol != null ? String(row[columnMapping.commentCol] ?? '').trim() : '';

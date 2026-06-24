@@ -5,7 +5,7 @@
 // caller (ImportModal) keeps its existing deterministic prefill untouched —
 // see the contract on the team board ("IMPLEMENTED: server-side LLM-suggest
 // contract").
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { api } from '../../api/client.js'
 
@@ -60,6 +60,11 @@ export default function ImportSuggestAI({ headers, rows, columnMapping, onResult
   const [showPreview, setShowPreview] = useState(false)
   const [status, setStatus] = useState('idle') // idle | loading | done
   const [note, setNote] = useState(null)
+  // Synchronous in-flight latch: state updates (setStatus) are async and
+  // can't guard against a same-tick double-click on "Confirm and send"
+  // firing api.suggestImportMapping twice before React flushes. This ref is
+  // checked/set synchronously at the top of handleConfirmSend instead.
+  const sendingRef = useRef(false)
 
   const payload = useMemo(
     () => buildPayload({ headers, rows, commentCol: columnMapping.commentCol, accountCol: columnMapping.accountCol }),
@@ -67,6 +72,8 @@ export default function ImportSuggestAI({ headers, rows, columnMapping, onResult
   )
 
   async function handleConfirmSend() {
+    if (sendingRef.current) return
+    sendingRef.current = true
     setShowPreview(false)
     setStatus('loading')
     setNote(null)
@@ -89,6 +96,7 @@ export default function ImportSuggestAI({ headers, rows, columnMapping, onResult
       onResult(null)
       setNote('AI suggestion unavailable — using local mapping.')
     } finally {
+      sendingRef.current = false
       setStatus('done')
     }
   }
@@ -157,11 +165,16 @@ export default function ImportSuggestAI({ headers, rows, columnMapping, onResult
             )}
 
             <div className="modal-actions" style={{ marginTop: 16 }}>
-              <button type="button" className="btn-ghost" onClick={() => setShowPreview(false)}>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setShowPreview(false)}
+                disabled={status === 'loading'}
+              >
                 Cancel
               </button>
-              <button type="button" className="btn" onClick={handleConfirmSend}>
-                Confirm and send
+              <button type="button" className="btn" onClick={handleConfirmSend} disabled={status === 'loading'}>
+                {status === 'loading' ? 'Sending…' : 'Confirm and send'}
               </button>
             </div>
           </div>

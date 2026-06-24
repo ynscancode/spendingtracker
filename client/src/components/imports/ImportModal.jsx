@@ -4,7 +4,7 @@ import { Check } from 'lucide-react'
 import { api } from '../../api/client.js'
 import { useCategories } from '../../contexts/categories.js'
 import { ACCOUNTS } from '../../constants/categories.js'
-import { buildDraftTransactions, detectTransferPairs } from '../../utils/importTransforms.js'
+import { buildDraftTransactions, detectTransferPairs, uniqueValues, UNCATEGORIZED } from '../../utils/importTransforms.js'
 import { guessColumnMapping } from './guessColumnMapping.js'
 import { STEPS, STEP_LABELS } from './importWizardSteps.js'
 import Step1Upload from './Step1Upload.jsx'
@@ -15,11 +15,30 @@ import { buildInitialAccountMapping, buildInitialCategoryMapping } from './build
 import Step4Review from './Step4Review.jsx'
 import Step5Confirm from './Step5Confirm.jsx'
 
+// Re-derives { headers, rows } from the raw grid at a given 1-based
+// dataStartRow (header row is dataStartRow - 1). Shared between
+// handleParsed (offset 1, the default) and setDataStartRow (any offset the
+// user picks), so there is exactly one code path for "headers/rows as a
+// function of the grid + offset" — avoids drift between the two call sites.
+function deriveGridView(grid, dataStartRow) {
+  const headerRow = Math.max(0, dataStartRow - 1)
+  const headers = (grid[headerRow] ?? []).map(String)
+  const rows = grid.slice(dataStartRow)
+  return { headers, rows }
+}
+
 function initialState() {
   return {
     stepIndex: 0,
     headers: [],
     rows: [],
+    // Full rectangular grid as returned by the server's parseFile (header
+    // row included), kept around so the "data starts on row __" control can
+    // re-derive headers/rows at a different offset without a re-upload.
+    rawGrid: [],
+    // 1-based index of the first DATA row; the header row is dataStartRow-1.
+    // Default 1 reproduces today's behavior (header=row0, data=row1+).
+    dataStartRow: 1,
     fileName: null,
     columnMapping: {
       dateCol: null,
@@ -33,6 +52,14 @@ function initialState() {
       commentCol: null,
       accountCol: null,
       fixedAccountId: ACCOUNTS.SPENDING,
+      // 'single' | 'multiple' — lives inside columnMapping (not a sibling
+      // top-level field) so it travels with the rest of the column config
+      // and is naturally preserved/reset together. Deriving this from
+      // accountCol==null instead would be ambiguous: accountCol==null is
+      // ALSO the legitimate "multiple accounts, but the user hasn't picked
+      // the account column yet" state. An explicit field disambiguates
+      // "I declared single-account" from "I haven't mapped it yet."
+      accountScope: 'single',
     },
     categoryMapping: new Map(),
     accountMapping: new Map(),
@@ -59,12 +86,23 @@ function initialState() {
 // direction/category/account presence) — the same local checks `updateDraft`
 // used to do inline. Does NOT touch transfer-ambiguity flags; that's
 // detectTransferPairs's job, run afterward over the whole set.
+//
+// Category rule (per product-owner DECISION 1 point 7): flag ONLY when
+// d.category is null. buildDraftTransactions already resolves category to a
+// non-empty string ("Uncategorized" or a real mapped name) in every
+// non-error case — no category column, or a blank cell, both fall back to
+// Uncategorized WITHOUT an issue at build time. null is reserved exactly for
+// "the user gave us a non-blank raw value and we have no resolved mapping
+// for it" (unmapped raw string, or an unresolved numeric code per Fix 4).
+// This MUST be expressed as a function of the resolved d.category field
+// (null vs string), not the build-time issue list, since recomputeDrafts
+// rebuilds issues from scratch on every edit via this function.
 function revalidateBaseDraft(d) {
   const issues = [];
   if (d.date == null) issues.push('Date is required.');
   if (d.amount == null || d.amount <= 0) issues.push('Amount must be a positive number.');
   if (d.direction !== 'in' && d.direction !== 'out') issues.push('Direction is required.');
-  if (!d.category) issues.push('Category is required.');
+  if (d.category == null) issues.push('Category is required.');
   if (d.accountId == null) issues.push('Account is required.');
   return { ...d, issues };
 }
@@ -84,7 +122,13 @@ function recomputeDrafts(baseDrafts) {
 
 function columnMappingIsComplete(mapping) {
   if (mapping.dateCol == null || !mapping.dateFormat) return false
-  if (mapping.categoryCol == null) return false
+  // Category column is optional (Fix 2 — no-category-column rows fall back
+  // to "Uncategorized" rather than being required up front).
+  if (mapping.accountScope === 'multiple') {
+    if (mapping.accountCol == null) return false
+  } else if (mapping.fixedAccountId == null) {
+    return false
+  }
   if (mapping.amountMode === 'single') {
     return mapping.amountCol != null
   }
@@ -142,15 +186,68 @@ export default function ImportModal({ onClose, onImported }) {
   }
 
   function handleParsed(data, fileName) {
-    const columnMapping = { ...guessColumnMapping(data.headers), fixedAccountId: ACCOUNTS.SPENDING }
+    // Tolerate a server response that hasn't been restarted to pick up the
+    // grid field yet (older deploy still returns only { headers, rows }):
+    // synthesize a grid from headers+rows so the wizard degrades gracefully
+    // instead of crashing on data.grid[...] being undefined. At offset 1 this
+    // produces an identical view to the old { headers, rows } behavior; the
+    // data-start-row control still works, it just operates over the
+    // reconstructed grid (so re-detecting an in-file legend row requires a
+    // server that actually returns the real grid).
+    const grid = data.grid && data.grid.length ? data.grid : [data.headers ?? [], ...(data.rows ?? [])]
+    // Derive headers/rows from the raw grid at the default offset (1) rather
+    // than using data.headers/data.rows directly — they're equal at offset 1,
+    // but going through the same helper setDataStartRow uses keeps there to
+    // exactly one code path for "headers/rows as a function of the grid +
+    // offset."
+    const { headers, rows } = deriveGridView(grid, 1)
+    const columnMapping = {
+      ...guessColumnMapping(headers),
+      fixedAccountId: ACCOUNTS.SPENDING,
+      accountScope: 'single',
+    }
     setState((s) => ({
       ...s,
-      headers: data.headers,
-      rows: data.rows,
+      headers,
+      rows,
+      rawGrid: grid,
+      dataStartRow: 1,
       fileName,
       columnMapping,
       stepIndex: STEPS.indexOf('columns'),
     }))
+  }
+
+  // Re-derives headers/rows from rawGrid at a new data-start-row offset, and
+  // RE-RUNS guessColumnMapping on the new headers — the whole point of this
+  // control is that a wrong header row (e.g. a legend/title row above it)
+  // means wrong column guesses, so the guess must be redone against the
+  // corrected headers. Preserves the user's fixedAccountId/accountScope
+  // (those aren't a function of header content). RESETS the downstream
+  // value maps + AI stashes since they were keyed on raw cell values read
+  // under the OLD header interpretation — a stale Map with size>0 would
+  // otherwise suppress the fresh buildInitialCategoryMapping/
+  // buildInitialAccountMapping call in proceedToValues.
+  function setDataStartRow(n) {
+    setState((s) => {
+      const { headers, rows } = deriveGridView(s.rawGrid, n)
+      const columnMapping = {
+        ...guessColumnMapping(headers),
+        fixedAccountId: s.columnMapping.fixedAccountId,
+        accountScope: s.columnMapping.accountScope,
+      }
+      return {
+        ...s,
+        dataStartRow: n,
+        headers,
+        rows,
+        columnMapping,
+        categoryMapping: new Map(),
+        accountMapping: new Map(),
+        aiCategorySuggestion: null,
+        aiAccountSuggestion: null,
+      }
+    })
   }
 
   function setColumnMapping(next) {
@@ -172,29 +269,50 @@ export default function ImportModal({ onClose, onImported }) {
   // proceedToValues for Step 3's Maps), never anything downstream of Step 3.
   function applyAiSuggestion(suggestion) {
     if (!suggestion) return // silent fallback — deterministic prefill already in place, untouched
-    setState((s) => ({
-      ...s,
-      columnMapping: {
+    setState((s) => {
+      const columnMapping = {
         ...s.columnMapping,
         ...suggestion.columnMapping,
-        // The LLM contract never proposes fixedAccountId (whole-file-fixed-
-        // account is a deterministic/manual-only concept) — keep whatever
-        // the wizard already has rather than letting it be clobbered.
+        // The LLM contract never proposes fixedAccountId or accountScope
+        // (whole-file-fixed-account / single-vs-multiple scope are
+        // deterministic/manual-only concepts) — keep whatever the wizard
+        // already has rather than letting either be clobbered.
         fixedAccountId: s.columnMapping.fixedAccountId,
-      },
-      aiCategorySuggestion: suggestion.categoryMapping,
-      aiAccountSuggestion: suggestion.accountMapping,
-    }))
+        accountScope: s.columnMapping.accountScope,
+      }
+      // Defensive: an LLM-proposed accountCol is unwanted in single mode —
+      // force it back to null so a future/odd LLM payload can't leak an
+      // account column into a file the user has explicitly declared single-
+      // account.
+      if (columnMapping.accountScope === 'single') {
+        columnMapping.accountCol = null
+      }
+      return {
+        ...s,
+        columnMapping,
+        aiCategorySuggestion: suggestion.categoryMapping,
+        aiAccountSuggestion: suggestion.accountMapping,
+      }
+    })
   }
 
   function proceedToValues() {
     setState((s) => {
-      const rawCategories = [...new Set(
-        s.rows.map((r) => (s.columnMapping.categoryCol != null ? String(r[s.columnMapping.categoryCol] ?? '').trim() : '')).filter(Boolean)
-      )]
-      const rawAccounts = [...new Set(
-        s.rows.map((r) => (s.columnMapping.accountCol != null ? String(r[s.columnMapping.accountCol] ?? '').trim() : '')).filter(Boolean)
-      )]
+      // Case-insensitive collapse via the SAME uniqueValues() Step3Values.jsx
+      // uses to render the value-mapping rows — NOT a plain Set. A plain Set
+      // would let two differently-cased spellings of a brand-new category
+      // (e.g. "NewCat" / "newcat") seed TWO categoryMapping entries with two
+      // different isNew names; handleCommit's categoriesToCreate dedupes by
+      // lowercased name and creates only ONE DB row, but the transaction
+      // drafts would still carry the other casing verbatim, which
+      // categoryService's case-SENSITIVE match rejects — rolling back the
+      // whole atomic commit batch. Using uniqueValues() here means the SEED
+      // layer collapses casing exactly the way the DISPLAY layer (Step 3) and
+      // the LOOKUP layer (buildDraftTransactions's getCI) already do, so a
+      // row's category/account resolves to the one casing that actually gets
+      // a Map entry (and the one category that actually gets created).
+      const rawCategories = uniqueValues(s.rows, s.columnMapping.categoryCol)
+      const rawAccounts = uniqueValues(s.rows, s.columnMapping.accountCol)
       const categoryMapping =
         s.categoryMapping.size > 0
           ? s.categoryMapping
@@ -261,12 +379,38 @@ export default function ImportModal({ onClose, onImported }) {
   async function handleCommit() {
     setState((s) => ({ ...s, submitting: true, submitError: null }))
     try {
+      // Collect categories that need creating before commit: (a) every
+      // distinct (account, list) pair that actually fell back to
+      // Uncategorized among committed drafts, and (b) every Step-3
+      // "+ Create new" entry, with account_id following the ROW it actually
+      // applies to — NOT a hardcoded ACCOUNTS.SPENDING, which was the latent
+      // bug here (a Step-3 "new category" entry is keyed by raw VALUE, not
+      // by account, so under multi-account scope the same raw category
+      // string can appear on rows routed to either account; the create must
+      // follow each row's resolved accountId, not assume Spending).
+      // Dedupe per (account_id, list, lowercased name) — exactly
+      // commitImport's own skip-if-exists scope, so re-queuing the same
+      // triple across many rows is harmless.
       const categoriesToCreate = []
-      const seenNewCategories = new Set()
-      for (const entry of state.categoryMapping.values()) {
-        if (entry.isNew && !seenNewCategories.has(`${entry.name}|${entry.list}`)) {
-          seenNewCategories.add(`${entry.name}|${entry.list}`)
-          categoriesToCreate.push({ name: entry.name, list: entry.list, account_id: ACCOUNTS.SPENDING })
+      const seen = new Set() // `${account_id}|${list}|${lowername}`
+      function queueCategory(name, list, account_id) {
+        const key = `${account_id}|${list}|${name.toLowerCase()}`
+        if (seen.has(key)) return
+        seen.add(key)
+        categoriesToCreate.push({ name, list, account_id })
+      }
+      const newNames = new Set(
+        [...state.categoryMapping.values()]
+          .filter((e) => e.isNew && e.name)
+          .map((e) => e.name.toLowerCase())
+      )
+      for (const d of state.drafts) {
+        if (d.excluded || d.type === 'transfer' || d.category == null) continue
+        const list = d.direction === 'out' ? 'outgoing' : 'incoming'
+        if (d.category === UNCATEGORIZED) {
+          queueCategory(UNCATEGORIZED, list, d.accountId) // (a) fallback Uncategorized, per distinct (account,list) actually used
+        } else if (newNames.has(d.category.toLowerCase())) {
+          queueCategory(d.category, list, d.accountId) // (b) Step-3 "+ Create new", account follows the row
         }
       }
 
@@ -340,7 +484,14 @@ export default function ImportModal({ onClose, onImported }) {
                 columnMapping={state.columnMapping}
                 onResult={applyAiSuggestion}
               />
-              <Step2Columns headers={state.headers} mapping={state.columnMapping} onChange={setColumnMapping} />
+              <Step2Columns
+                headers={state.headers}
+                mapping={state.columnMapping}
+                onChange={setColumnMapping}
+                rawGrid={state.rawGrid}
+                dataStartRow={state.dataStartRow}
+                onDataStartRowChange={setDataStartRow}
+              />
             </>
           )}
 
