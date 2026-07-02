@@ -13,3 +13,4 @@ server/.env.*
 # but DO track the templates (they hold only var names + placeholders, never a real key)
 !.env.example
 !server/.env.example
+.secrets/
