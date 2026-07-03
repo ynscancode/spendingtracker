@@ -24,7 +24,7 @@ export default function TransactionGroup({ year, monthsMap, editingId, onEdit, o
                 </tr>
               </thead>
               <tbody>
-                <tr><td colSpan={7} style={{ padding: '4px 12px', color: 'var(--muted)', fontWeight: 600, fontSize: 'var(--font-sm)' }}>{monthLabel(month)}</td></tr>
+                <tr className="month-label-row"><td colSpan={7} style={{ padding: '4px 12px', color: 'var(--muted)', fontWeight: 600, fontSize: 'var(--font-sm)' }}>{monthLabel(month)}</td></tr>
                 {days.map(([day, txns]) => (
                   <DayGroup
                     key={day}

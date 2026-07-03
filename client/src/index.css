@@ -823,6 +823,25 @@ td {
 
 .day-header-cell {
   padding: 20px 12px 8px !important;
+  /* Hard divider between day groups. The day-header <tr> is the first row of
+     each day's block inside the shared <tbody> (see TransactionGroup.jsx) —
+     giving it a top border visually separates it from whatever the previous
+     day's last row (a .day-total-row or .txn-row) rendered above it. More
+     prominent than the existing intra-day .txn-row separators, which use the
+     subtler --border-strong token; this uses --border (the more visible of
+     the two border tokens across all three themes) at 2px so it reads as an
+     intentional section break rather than just another row rule. */
+  border-top: 2px solid var(--border);
+}
+
+/* ...but NOT before the very first day group. The per-month label row
+   (TransactionGroup.jsx, className="month-label-row") is the true first
+   child of the shared <tbody> (border-collapse makes tr:first-of-type
+   target that label row, not the first day, so it can't be used here
+   either) — cancel the border specifically on the day-header-cell of the
+   <tr> immediately following it. */
+.month-label-row + tr .day-header-cell {
+  border-top: none;
 }
 
 .day-header-row-inner {
