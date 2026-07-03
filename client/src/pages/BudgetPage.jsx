@@ -61,6 +61,8 @@ export default function BudgetPage() {
     return { category, actual, budget, health: healthFor(actual, budget), color: colorFor(ACCOUNTS.SPENDING, category) }
   })
 
+  const totalBudgeted = rows.reduce((sum, r) => sum + r.budget, 0)
+
   async function commitBudget(category, rawValue) {
     const value = rawValue.trim()
     const amount = value === '' ? 0 : Number(value)
@@ -108,6 +110,7 @@ export default function BudgetPage() {
       <div className="card">
         <div className="card-row">
           <h2>Category budgets</h2>
+          <span style={{ color: 'var(--muted)' }}>Total budgeted {formatCurrency(totalBudgeted)}</span>
         </div>
         {rows.map((row) => {
           const draftValue = drafts[row.category]
