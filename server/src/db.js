@@ -4,7 +4,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', 'budget.db');
+// Configurable so a deployed instance (e.g. Fly.io) can point this at a
+// mounted persistent volume (e.g. /data/budget.db) instead of the repo-local
+// default used in local dev. Falls back to the original hardcoded path when
+// DB_PATH is unset, so local dev/smoke-test behavior is unchanged.
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'budget.db');
+
+// On a fresh volume mount (e.g. Fly's /data) the parent directory exists but
+// is otherwise empty — better-sqlite3 will not create missing directories on
+// its own, only the file. Ensure the directory exists before opening.
+const dbDir = path.dirname(DB_PATH);
+fs.mkdirSync(dbDir, { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');

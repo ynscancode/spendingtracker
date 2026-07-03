@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import MonthSwitcher from '../layout/MonthSwitcher.jsx'
 import { monthRangeFor, monthLabel } from '../../utils/dateUtils.js'
+import { apiUrl } from '../../api/client.js'
 
 // Mirrors the portal/overlay/panel conventions of TransactionModal.jsx and
 // ClearHistoryModal.jsx (.modal-overlay / .modal-panel / .modal-head /
@@ -35,6 +36,11 @@ export default function ExportModal({ month, activity, onClose }) {
     // `Content-Disposition: attachment; filename="..."` header drive the
     // download name directly; the `a.download` below is just a same-origin
     // belt-and-suspenders in case that header is ever missing.
+    //
+    // Uses apiUrl() (same base as api/client.js's request()/requestFormData())
+    // rather than a bare relative `/api/...` path: on a static SPA host
+    // (Vercel/Netlify) a relative path would hit the frontend's own domain,
+    // not the separately-hosted backend, breaking the download in production.
     const params = new URLSearchParams()
     if (scope === 'all') {
       params.set('all', 'true')
@@ -45,7 +51,7 @@ export default function ExportModal({ month, activity, onClose }) {
     }
     const filename = scope === 'all' ? 'transactions-all.xlsx' : `transactions-${pickedMonth}.xlsx`
     const link = document.createElement('a')
-    link.href = `/api/transactions/export?${params.toString()}`
+    link.href = `${apiUrl('/transactions/export')}?${params.toString()}`
     link.download = filename
     document.body.appendChild(link)
     link.click()

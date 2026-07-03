@@ -9,7 +9,21 @@ import categoriesRouter from './routes/categories.js';
 import importsRouter from './routes/imports.js';
 
 const app = express();
-app.use(cors());
+
+// CORS_ORIGIN, if set, restricts allowed origins (comma-separated list
+// supported) — for the public-internet deployment where this API has no
+// auth and will be reached from a separately-hosted frontend (Vercel/
+// Netlify). Left unset, behavior is unchanged from before: fully open,
+// which is fine for local dev (client dev server + backend, no public
+// exposure).
+const corsOrigin = process.env.CORS_ORIGIN;
+if (corsOrigin) {
+  const allowedOrigins = corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+  app.use(cors({ origin: allowedOrigins }));
+} else {
+  app.use(cors());
+}
+
 app.use(express.json());
 
 app.use('/api/accounts', accountsRouter);

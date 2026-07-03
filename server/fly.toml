@@ -1,0 +1,44 @@
+# Fly.io app config for the budget tracker backend.
+#
+# BEFORE FIRST DEPLOY — the user/technical-writer must:
+#   1. Replace `app = "CHANGE-ME-budget-tracker-api"` below with a globally-unique
+#      Fly app name (or let `fly launch` generate one and overwrite this file).
+#   2. Replace `primary_region = "CHANGE-ME"` with a real Fly region code close to
+#      where the app will mostly be used (e.g. "iad" for US East, "lhr" for London,
+#      "syd" for Sydney). Full list: `fly platform regions`.
+#   3. Create the volume once (must be created before/at first deploy, size in GB —
+#      1GB is far more than enough for a single-user SQLite budgeting DB):
+#        fly volumes create budget_data --region <same-as-primary_region> --size 1
+#   4. Set secrets (NEVER put these values directly in this file — they must not be
+#      committed to git): at minimum CORS_ORIGIN once the frontend's deployed URL is
+#      known, and optionally the OLLAMA_CLOUD_* vars if the AI-import-suggest feature
+#      is wanted in production:
+#        fly secrets set CORS_ORIGIN=https://your-frontend.vercel.app
+#        fly secrets set OLLAMA_CLOUD_API_KEY=... OLLAMA_CLOUD_MODEL=... OLLAMA_CLOUD_BASE_URL=...
+#      (CORS_ORIGIN supports a comma-separated list if the frontend is deployed to
+#      more than one origin, e.g. a Vercel preview URL + the production URL.)
+
+app = "CHANGE-ME-budget-tracker-api"
+primary_region = "CHANGE-ME"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  DB_PATH = "/data/budget.db"
+  # CORS_ORIGIN is NOT set here on purpose — set it via `fly secrets set` (see
+  # above) once the frontend's deployed URL is known. Leaving it unset here
+  # means the server falls back to fully-open CORS until the secret is set.
+
+[mounts]
+  source = "budget_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]

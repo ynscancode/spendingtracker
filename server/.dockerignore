@@ -1,0 +1,22 @@
+node_modules
+npm-debug.log
+
+# Local SQLite DB files (Fly deployment uses a mounted volume instead;
+# never bake local dev data into the image).
+budget.db
+budget.db-journal
+budget.db-wal
+budget.db-shm
+
+# Secrets — never build into the image; set via `fly secrets set` instead.
+.env
+.env.*
+
+*.log
+.dev.log
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+fly.toml
