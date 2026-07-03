@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../../api/client.js'
 import { useCategories } from '../../contexts/categories.js'
-import { ACCOUNT_NAMES } from '../../constants/categories.js'
+import { ACCOUNTS, ACCOUNT_NAMES } from '../../constants/categories.js'
 
 const RESERVED_NAMES = ['transfer-in', 'transfer-out']
 
@@ -125,7 +126,19 @@ function CategoryColumn({ title, list, listKey, accountId, placeholder, refetch 
   )
 }
 
-export default function CategoryManagerModal({ accountId, onClose }) {
+export default function CategoryManagerModal({ accountId, initialAccountId, onClose }) {
+  // Two call modes, gated purely by whether the caller pins `accountId`:
+  // - Fixed mode (TransactionModal): `accountId` is provided → single account,
+  //   no selector, behavior unchanged from before this feature.
+  // - Standalone/selectable mode (Transactions/Budget page buttons): `accountId`
+  //   is omitted, `initialAccountId` seeds the initial selection, and an
+  //   account selector renders so the user can switch which account's
+  //   categories they're managing.
+  const selectable = accountId === undefined
+  const [selectedAccountId, setSelectedAccountId] = useState(
+    accountId ?? initialAccountId ?? ACCOUNTS.SPENDING
+  )
+  const activeAccountId = selectable ? selectedAccountId : accountId
   const { outgoingFor, incomingFor, loading, error, refetch } = useCategories()
   const panelRef = useRef(null)
 
@@ -163,16 +176,31 @@ export default function CategoryManagerModal({ accountId, onClose }) {
 
   // Defense-in-depth: never render system categories even if a future API
   // regression slips them through (per AC3's "excluded entirely" wording).
-  const outgoingList = outgoingFor(accountId).filter((c) => !RESERVED_NAMES.includes(c.name.toLowerCase()))
-  const incomingList = incomingFor(accountId).filter((c) => !RESERVED_NAMES.includes(c.name.toLowerCase()))
+  const outgoingList = outgoingFor(activeAccountId).filter((c) => !RESERVED_NAMES.includes(c.name.toLowerCase()))
+  const incomingList = incomingFor(activeAccountId).filter((c) => !RESERVED_NAMES.includes(c.name.toLowerCase()))
 
-  return (
+  return createPortal(
     <div className="modal-overlay" style={{ zIndex: 51 }} onClick={onClose}>
       <div className="modal-panel" style={{ width: 'min(620px, 100%)' }} onClick={(e) => e.stopPropagation()} ref={panelRef}>
         <div className="modal-head">
-          <h2>Manage categories — {ACCOUNT_NAMES[accountId]}</h2>
+          <h2>Manage categories — {ACCOUNT_NAMES[activeAccountId]}</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
+
+        {selectable && (
+          <div className="pill-group" style={{ marginBottom: '16px' }}>
+            {Object.entries(ACCOUNT_NAMES).map(([id, name]) => (
+              <button
+                key={id}
+                type="button"
+                className={`pill-btn ${String(activeAccountId) === id ? 'active' : ''}`}
+                onClick={() => setSelectedAccountId(Number(id))}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <div className="loading-placeholder"><p>Loading...</p></div>
@@ -187,7 +215,7 @@ export default function CategoryManagerModal({ accountId, onClose }) {
               title="Outgoing"
               list={outgoingList}
               listKey="outgoing"
-              accountId={accountId}
+              accountId={activeAccountId}
               placeholder="Add outgoing category"
               refetch={refetch}
             />
@@ -195,13 +223,14 @@ export default function CategoryManagerModal({ accountId, onClose }) {
               title="Incoming"
               list={incomingList}
               listKey="incoming"
-              accountId={accountId}
+              accountId={activeAccountId}
               placeholder="Add incoming category"
               refetch={refetch}
             />
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.getElementById('modal-root') || document.body
   )
 }

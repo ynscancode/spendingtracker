@@ -5,6 +5,7 @@ import { formatCurrency } from '../utils/format.js'
 import { ACCOUNTS } from '../constants/categories.js'
 import { useCategories } from '../contexts/categories.js'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
+import CategoryManagerModal from '../components/transactions/CategoryManagerModal.jsx'
 import { fillColorFor, suffixFor } from '../utils/budgetHealth.js'
 
 // Budget health classification shared by the editing list and the chart.
@@ -26,6 +27,7 @@ export default function BudgetPage() {
   const [drafts, setDrafts] = useState({})
   const [savingCategory, setSavingCategory] = useState(null)
   const [rowErrors, setRowErrors] = useState({})
+  const [catManagerOpen, setCatManagerOpen] = useState(false)
 
   async function loadAll(forMonth) {
     setLoading(true)
@@ -90,8 +92,18 @@ export default function BudgetPage() {
           <div className="page-eyebrow">{monthLabel(month)}</div>
           <h1 className="page-title">Budget</h1>
         </div>
-        <MonthSwitcher month={month} onChange={setMonth} />
+        <div className="page-header-actions">
+          <button type="button" className="btn btn-secondary" onClick={() => setCatManagerOpen(true)}>Manage categories</button>
+          <MonthSwitcher month={month} onChange={setMonth} />
+        </div>
       </div>
+
+      {catManagerOpen && (
+        <CategoryManagerModal
+          initialAccountId={ACCOUNTS.SPENDING}
+          onClose={() => setCatManagerOpen(false)}
+        />
+      )}
 
       <div className="card">
         <div className="card-row">

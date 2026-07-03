@@ -1153,6 +1153,7 @@ td {
   text-transform: uppercase;
   color: var(--muted);
   margin-top: 2px;
+  white-space: nowrap;
 }
 
 .donut-wrap {

@@ -4,10 +4,11 @@ import TransactionList from '../components/transactions/TransactionList.jsx'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
 import ExportModal from '../components/transactions/ExportModal.jsx'
 import ClearHistoryModal from '../components/transactions/ClearHistoryModal.jsx'
+import CategoryManagerModal from '../components/transactions/CategoryManagerModal.jsx'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 import { currentMonthStr, monthRangeFor, monthLabel } from '../utils/dateUtils.js'
 import { formatCurrency } from '../utils/format.js'
-import { ACCOUNT_NAMES } from '../constants/categories.js'
+import { ACCOUNTS, ACCOUNT_NAMES } from '../constants/categories.js'
 import { useTransactionActivity } from '../contexts/transactionActivity.js'
 
 const ACCOUNT_FILTERS = [['all', 'All'], ...Object.entries(ACCOUNT_NAMES)]
@@ -24,6 +25,7 @@ export default function TransactionsPage() {
   const [modalMode, setModalMode] = useState('normal')
   const [exportOpen, setExportOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
+  const [catManagerOpen, setCatManagerOpen] = useState(false)
   const [clearedMessage, setClearedMessage] = useState(null)
 
   const loadTransactions = useCallback(async () => {
@@ -103,6 +105,7 @@ export default function TransactionsPage() {
           <button type="button" className="btn" onClick={() => openModal('normal')}>+ Transaction</button>
           <button type="button" className="btn btn-secondary" onClick={() => openModal('transfer')}>⇄ Transfer</button>
           <button type="button" className="btn btn-secondary" onClick={() => setExportOpen(true)}>Export</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setCatManagerOpen(true)}>Manage categories</button>
           <span className="page-header-actions-divider" aria-hidden="true" />
           <button type="button" className="btn-danger" onClick={() => setClearOpen(true)}>Clear all history</button>
         </div>
@@ -174,6 +177,13 @@ export default function TransactionsPage() {
 
       {clearOpen && (
         <ClearHistoryModal onClose={() => setClearOpen(false)} onCleared={handleCleared} />
+      )}
+
+      {catManagerOpen && (
+        <CategoryManagerModal
+          initialAccountId={accountFilter === 'all' ? ACCOUNTS.SPENDING : Number(accountFilter)}
+          onClose={() => setCatManagerOpen(false)}
+        />
       )}
     </div>
   )
