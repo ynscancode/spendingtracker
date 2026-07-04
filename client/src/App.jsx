@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { ThemeProvider } from './contexts/ThemeContext.jsx'
 import { CategoriesProvider } from './contexts/CategoriesContext.jsx'
 import { TransactionActivityProvider } from './contexts/TransactionActivityContext.jsx'
@@ -27,6 +28,7 @@ function App() {
                 app-root so theme CSS custom properties cascade in correctly. */}
             <div id="modal-root" />
           </div>
+          <Analytics />
         </TransactionActivityProvider>
       </CategoriesProvider>
     </ThemeProvider>
