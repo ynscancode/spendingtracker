@@ -110,6 +110,13 @@ select {
   flex-wrap: wrap;
 }
 
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -325,6 +332,212 @@ select {
   align-self: stretch;
   background: var(--border);
   margin: 0 2px;
+}
+
+/* ---------- Auth (BATCH 11: login/signup/guest + account switcher) ---------- */
+
+.auth-splash {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font: 600 13px/1 var(--font-ui);
+}
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 32px;
+  animation: fadeUp 0.35s ease both;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.auth-tagline {
+  text-align: center;
+  color: var(--muted);
+  font: 400 13.5px/1.4 var(--font-ui);
+  margin: 0 0 22px;
+}
+
+.auth-tabs {
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.auth-tabs .pill-btn {
+  flex: 1;
+  text-align: center;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-form input {
+  background: var(--surface-2);
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--faint);
+  font: 600 10.5px/1 var(--font-num);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 22px 0 16px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-guest-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.auth-guest-note {
+  color: var(--muted);
+  font: 400 12px/1.5 var(--font-ui);
+  margin: 12px 0 0;
+}
+
+/* ---------- Account switcher (Header) ---------- */
+
+.account-switcher {
+  position: relative;
+}
+
+.account-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-sm) + 4px);
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 12.5px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.account-switcher-trigger:hover {
+  border-color: var(--accent-border);
+}
+
+.account-switcher-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-switcher-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 600 9.5px/1.4 var(--font-num);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.account-switcher-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: max(220px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fadeUp 0.15s ease both;
+}
+
+.account-switcher-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-switcher-group-label {
+  font: 600 9.5px/1.4 var(--font-num);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 6px 8px 2px;
+}
+
+.account-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: 500 13px/1 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-switcher-item:hover {
+  background: var(--surface-2);
+}
+
+.account-switcher-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.account-switcher-item-danger {
+  color: var(--red);
+}
+
+.account-switcher-error {
+  margin: 2px 8px 4px;
 }
 
 /* ---------- Cards ---------- */
@@ -2257,5 +2470,20 @@ td {
   .cat-bar-row-value {
     flex: 1 1 100%;
     text-align: right;
+  }
+
+  /* ---- Auth screen / account switcher ---- */
+  .auth-card {
+    padding: 22px;
+  }
+
+  .account-switcher-name {
+    max-width: 90px;
+  }
+
+  .account-switcher-menu {
+    right: 0;
+    left: auto;
+    width: max(200px, 60vw);
   }
 }

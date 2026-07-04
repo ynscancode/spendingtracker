@@ -16,7 +16,7 @@ function handleError(res, err) {
 
 router.get('/', async (req, res) => {
   try {
-    const categories = await listCategories(req.query.account_id);
+    const categories = await listCategories(req.query.account_id, req.userId);
     res.json(categories);
   } catch (err) {
     handleError(res, err);
@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const result = await createCategory(req.body);
+    const result = await createCategory(req.body, req.userId);
     res.status(201).json(result);
   } catch (err) {
     handleError(res, err);
@@ -34,7 +34,7 @@ router.post('/', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await deleteCategory(req.params.id);
+    await deleteCategory(req.params.id, req.userId);
     res.status(204).send();
   } catch (err) {
     handleError(res, err);

@@ -10,7 +10,7 @@ router.get('/daily', async (req, res) => {
     if (!date || !isValidDateStr(date)) {
       return res.status(400).json({ error: 'date query param required in YYYY-MM-DD format' });
     }
-    res.json(await getDailySummary(date));
+    res.json(await getDailySummary(date, req.userId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -23,7 +23,7 @@ router.get('/monthly', async (req, res) => {
     if (!month || !isValidMonthStr(month)) {
       return res.status(400).json({ error: 'month query param required in YYYY-MM format' });
     }
-    res.json(await getMonthlySummary(month));
+    res.json(await getMonthlySummary(month, req.userId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -32,7 +32,7 @@ router.get('/monthly', async (req, res) => {
 
 router.get('/activity', async (req, res) => {
   try {
-    res.json(await getTransactionActivity());
+    res.json(await getTransactionActivity(req.userId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

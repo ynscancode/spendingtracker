@@ -44,7 +44,7 @@ async function withTransactionalExecutor(exec, body) {
   }
 }
 
-async function assertValidNormalTransaction({ date, account_id, direction, category, amount }, exec = client) {
+async function assertValidNormalTransaction({ date, account_id, direction, category, amount }, userId, exec = client) {
   if (!date || !account_id || !direction || !category || amount == null) {
     throw new ValidationError('date, account_id, direction, category, and amount are required');
   }
@@ -60,7 +60,7 @@ async function assertValidNormalTransaction({ date, account_id, direction, categ
   // transaction (e.g. a just-created category referenced by a later
   // transaction draft in the same import batch) — reading via the bare
   // client would miss uncommitted writes made through a separate tx handle.
-  if (!(await isValidNormalCategory(category, direction, account_id, exec))) {
+  if (!(await isValidNormalCategory(category, direction, account_id, userId, exec))) {
     throw new ValidationError(`category "${category}" is not valid for direction "${direction}"`);
   }
   if (typeof amount !== 'number' || amount <= 0) {
@@ -68,19 +68,21 @@ async function assertValidNormalTransaction({ date, account_id, direction, categ
   }
 }
 
-export async function createTransaction({ date, account_id, direction, category, amount, comment = '' }, exec = client) {
-  await assertValidNormalTransaction({ date, account_id, direction, category, amount }, exec);
+export async function createTransaction({ date, account_id, direction, category, amount, comment = '' }, userId, exec = client) {
+  await assertValidNormalTransaction({ date, account_id, direction, category, amount }, userId, exec);
 
   return withTransactionalExecutor(exec, async (runner) => {
     const result = await runner.execute({
       sql: `
-        INSERT INTO transactions (date, account_id, direction, category, amount, comment, is_transfer)
-        VALUES (:date, :account_id, :direction, :category, :amount, :comment, 0)
+        INSERT INTO transactions (date, account_id, direction, category, amount, comment, is_transfer, user_id)
+        VALUES (:date, :account_id, :direction, :category, :amount, :comment, 0, :userId)
       `,
-      args: { date, account_id, direction, category, amount, comment },
+      args: { date, account_id, direction, category, amount, comment, userId },
     });
     const id = Number(result.lastInsertRowid);
-    const row = (await runner.execute({ sql: 'SELECT * FROM transactions WHERE id = :id', args: { id } })).rows[0];
+    const row = (
+      await runner.execute({ sql: 'SELECT * FROM transactions WHERE id = :id AND user_id = :userId', args: { id, userId } })
+    ).rows[0];
     return row;
   });
 }
@@ -95,7 +97,7 @@ function defaultCommentFor(fromAccountId, toAccountId) {
   return { out: 'internal transfer', in: 'internal transfer' };
 }
 
-export async function createTransfer({ date, from_account_id, to_account_id, amount, comment }, exec = client) {
+export async function createTransfer({ date, from_account_id, to_account_id, amount, comment }, userId, exec = client) {
   if (!date || !from_account_id || !to_account_id || amount == null) {
     throw new ValidationError('date, from_account_id, to_account_id, and amount are required');
   }
@@ -112,15 +114,15 @@ export async function createTransfer({ date, from_account_id, to_account_id, amo
 
   return withTransactionalExecutor(exec, async (runner) => {
     const insertSql = `
-      INSERT INTO transactions (date, account_id, direction, category, amount, comment, is_transfer, linked_transaction_id)
-      VALUES (:date, :account_id, :direction, :category, :amount, :comment, 1, :linked_transaction_id)
+      INSERT INTO transactions (date, account_id, direction, category, amount, comment, is_transfer, linked_transaction_id, user_id)
+      VALUES (:date, :account_id, :direction, :category, :amount, :comment, 1, :linked_transaction_id, :userId)
     `;
 
     const outResult = await runner.execute({
       sql: insertSql,
       args: {
         date, account_id: from_account_id, direction: 'out', category: 'transfer-out',
-        amount, comment: outComment, linked_transaction_id: null,
+        amount, comment: outComment, linked_transaction_id: null, userId,
       },
     });
     const outId = Number(outResult.lastInsertRowid);
@@ -129,25 +131,31 @@ export async function createTransfer({ date, from_account_id, to_account_id, amo
       sql: insertSql,
       args: {
         date, account_id: to_account_id, direction: 'in', category: 'transfer-in',
-        amount, comment: inComment, linked_transaction_id: outId,
+        amount, comment: inComment, linked_transaction_id: outId, userId,
       },
     });
     const inId = Number(inResult.lastInsertRowid);
 
     await runner.execute({
-      sql: 'UPDATE transactions SET linked_transaction_id = :inId WHERE id = :outId',
-      args: { inId, outId },
+      sql: 'UPDATE transactions SET linked_transaction_id = :inId WHERE id = :outId AND user_id = :userId',
+      args: { inId, outId, userId },
     });
 
-    const outRow = (await runner.execute({ sql: 'SELECT * FROM transactions WHERE id = :id', args: { id: outId } })).rows[0];
-    const inRow = (await runner.execute({ sql: 'SELECT * FROM transactions WHERE id = :id', args: { id: inId } })).rows[0];
+    const outRow = (
+      await runner.execute({ sql: 'SELECT * FROM transactions WHERE id = :id AND user_id = :userId', args: { id: outId, userId } })
+    ).rows[0];
+    const inRow = (
+      await runner.execute({ sql: 'SELECT * FROM transactions WHERE id = :id AND user_id = :userId', args: { id: inId, userId } })
+    ).rows[0];
 
     return { outRow, inRow };
   });
 }
 
-export async function updateTransaction(id, { date, amount, comment, category }, exec = client) {
-  const existing = (await exec.execute({ sql: 'SELECT * FROM transactions WHERE id = :id', args: { id } })).rows[0];
+export async function updateTransaction(id, { date, amount, comment, category }, userId, exec = client) {
+  const existing = (
+    await exec.execute({ sql: 'SELECT * FROM transactions WHERE id = :id AND user_id = :userId', args: { id, userId } })
+  ).rows[0];
   if (!existing) {
     const err = new Error('Transaction not found');
     err.statusCode = 404;
@@ -165,7 +173,7 @@ export async function updateTransaction(id, { date, amount, comment, category },
     if (TRANSFER_CATEGORIES.includes(category)) {
       throw new ValidationError('transfer categories cannot be set on normal transactions');
     }
-    if (!(await isValidNormalCategory(category, existing.direction, existing.account_id, exec))) {
+    if (!(await isValidNormalCategory(category, existing.direction, existing.account_id, userId, exec))) {
       throw new ValidationError(`category "${category}" is not valid for direction "${existing.direction}"`);
     }
   }
@@ -179,23 +187,27 @@ export async function updateTransaction(id, { date, amount, comment, category },
 
   await withTransactionalExecutor(exec, async (runner) => {
     await runner.execute({
-      sql: 'UPDATE transactions SET date = :date, amount = :amount, comment = :comment, category = :category WHERE id = :id',
-      args: { ...updates, id },
+      sql: 'UPDATE transactions SET date = :date, amount = :amount, comment = :comment, category = :category WHERE id = :id AND user_id = :userId',
+      args: { ...updates, id, userId },
     });
 
     if (existing.is_transfer && existing.linked_transaction_id) {
       await runner.execute({
-        sql: 'UPDATE transactions SET date = :date, amount = :amount, comment = :comment WHERE id = :id',
-        args: { date: updates.date, amount: updates.amount, comment: updates.comment, id: existing.linked_transaction_id },
+        sql: 'UPDATE transactions SET date = :date, amount = :amount, comment = :comment WHERE id = :id AND user_id = :userId',
+        args: { date: updates.date, amount: updates.amount, comment: updates.comment, id: existing.linked_transaction_id, userId },
       });
     }
   });
 
-  return (await exec.execute({ sql: 'SELECT * FROM transactions WHERE id = :id', args: { id } })).rows[0];
+  return (
+    await exec.execute({ sql: 'SELECT * FROM transactions WHERE id = :id AND user_id = :userId', args: { id, userId } })
+  ).rows[0];
 }
 
-export async function deleteTransaction(id, exec = client) {
-  const existing = (await exec.execute({ sql: 'SELECT * FROM transactions WHERE id = :id', args: { id } })).rows[0];
+export async function deleteTransaction(id, userId, exec = client) {
+  const existing = (
+    await exec.execute({ sql: 'SELECT * FROM transactions WHERE id = :id AND user_id = :userId', args: { id, userId } })
+  ).rows[0];
   if (!existing) {
     const err = new Error('Transaction not found');
     err.statusCode = 404;
@@ -207,26 +219,30 @@ export async function deleteTransaction(id, exec = client) {
       // Clear the mutual linked_transaction_id references first so deleting
       // either row doesn't violate the self-referencing foreign key.
       await runner.execute({
-        sql: 'UPDATE transactions SET linked_transaction_id = NULL WHERE id IN (:id, :linkedId)',
-        args: { id, linkedId: existing.linked_transaction_id },
+        sql: 'UPDATE transactions SET linked_transaction_id = NULL WHERE id IN (:id, :linkedId) AND user_id = :userId',
+        args: { id, linkedId: existing.linked_transaction_id, userId },
       });
       await runner.execute({
-        sql: 'DELETE FROM transactions WHERE id = :linkedId',
-        args: { linkedId: existing.linked_transaction_id },
+        sql: 'DELETE FROM transactions WHERE id = :linkedId AND user_id = :userId',
+        args: { linkedId: existing.linked_transaction_id, userId },
       });
     }
-    await runner.execute({ sql: 'DELETE FROM transactions WHERE id = :id', args: { id } });
+    await runner.execute({ sql: 'DELETE FROM transactions WHERE id = :id AND user_id = :userId', args: { id, userId } });
   });
 }
 
-export async function deleteAllTransactions(exec = client) {
+export async function deleteAllTransactions(userId, exec = client) {
   return withTransactionalExecutor(exec, async (runner) => {
     // Null out every self-referencing linked_transaction_id first so the
     // subsequent bulk DELETE never violates the self-referencing FK
     // (a transfer leg's row would otherwise still be referenced by its
     // not-yet-deleted partner at the moment SQLite checks the constraint).
-    await runner.execute('UPDATE transactions SET linked_transaction_id = NULL');
-    const result = await runner.execute('DELETE FROM transactions');
+    // Scoped to this user only — never a global wipe.
+    await runner.execute({
+      sql: 'UPDATE transactions SET linked_transaction_id = NULL WHERE user_id = :userId',
+      args: { userId },
+    });
+    const result = await runner.execute({ sql: 'DELETE FROM transactions WHERE user_id = :userId', args: { userId } });
     return result.rowsAffected;
   });
 }
@@ -277,11 +293,11 @@ function computeColWidths(header, dataRows) {
 // balances from the window fn, partitioned by account_id) are filtered
 // into their own sheet rather than recomputed. Both sheets are always
 // present, even if a given account has zero rows in range.
-export async function buildTransactionsWorkbook({ from, to } = {}) {
+export async function buildTransactionsWorkbook({ from, to } = {}, userId) {
   const isAllTime = !from && !to;
   const rows = isAllTime
-    ? await listTransactionsWithBalance({})
-    : await listTransactionsWithBalance({ from, to });
+    ? await listTransactionsWithBalance({ userId })
+    : await listTransactionsWithBalance({ from, to, userId });
 
   const accounts = (await client.execute('SELECT id, name FROM accounts')).rows;
   const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));

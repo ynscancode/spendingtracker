@@ -241,7 +241,7 @@ function assertCategoryDraftShape(draft) {
 // board Batch 8 contract). Any ValidationError anywhere in the batch rolls
 // back everything that ran before it — nothing is written until the whole
 // batch succeeds.
-export async function commitImport({ categoriesToCreate = [], transactions = [] } = {}) {
+export async function commitImport({ categoriesToCreate = [], transactions = [] } = {}, userId) {
   if (!Array.isArray(categoriesToCreate) || !Array.isArray(transactions)) {
     throw new ValidationError('categoriesToCreate and transactions must be arrays');
   }
@@ -256,8 +256,8 @@ export async function commitImport({ categoriesToCreate = [], transactions = [] 
       assertCategoryDraftShape(draft);
       const { name, list, account_id } = draft;
       const existingNames = list === 'outgoing'
-        ? await getOutgoingNames(account_id, tx)
-        : await getIncomingNames(account_id, tx);
+        ? await getOutgoingNames(account_id, userId, tx)
+        : await getIncomingNames(account_id, userId, tx);
       const alreadyExists = existingNames.some(
         (existing) => existing.toLowerCase() === String(name).trim().toLowerCase()
       );
@@ -266,7 +266,7 @@ export async function commitImport({ categoriesToCreate = [], transactions = [] 
         // category) already covers this name — skip rather than let
         // createCategory throw and abort the whole commit.
       }
-      await createCategory({ name, list, account_id }, tx);
+      await createCategory({ name, list, account_id }, userId, tx);
       categoriesCreated += 1;
     }
 
@@ -282,7 +282,7 @@ export async function commitImport({ categoriesToCreate = [], transactions = [] 
           category: draft.category,
           amount: draft.amount,
           comment: draft.comment,
-        }, tx);
+        }, userId, tx);
         created += 1;
       } else if (draft.type === 'transfer') {
         await createTransfer({
@@ -291,7 +291,7 @@ export async function commitImport({ categoriesToCreate = [], transactions = [] 
           to_account_id: draft.to_account_id,
           amount: draft.amount,
           comment: draft.comment,
-        }, tx);
+        }, userId, tx);
         transfersLinked += 1;
       } else {
         throw new ValidationError(`unknown transaction draft type "${draft && draft.type}"`);

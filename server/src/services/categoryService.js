@@ -22,6 +22,50 @@ const RESERVED_NAMES = ['transfer-in', 'transfer-out'];
 const MAX_NAME_LENGTH = 30;
 const LISTS = ['outgoing', 'incoming'];
 
+// Replicates exactly what 003_categories.sql + 004_category_accounts.sql
+// produce for a fresh account pair (11 non-system seed categories, exact
+// hex colors — see BATCH 11 tech-lead contract section E). Driven from code
+// (not by cloning legacy NULL rows) since after the first-signup claim those
+// rows are no longer NULL/unclaimed. transfer-in/transfer-out are NOT
+// included here — they are system-managed, account_id IS NULL, user_id IS
+// NULL, and already exist globally; never re-seeded per-user.
+export const SEED_CATEGORIES = [
+  { name: 'food', list: 'outgoing', color: '#C76060' },
+  { name: 'drinks', list: 'outgoing', color: '#60C7C7' },
+  { name: 'transport', list: 'outgoing', color: '#C79E60' },
+  { name: 'shopping', list: 'outgoing', color: '#7560C7' },
+  { name: 'alcohol', list: 'outgoing', color: '#B360C7' },
+  { name: 'fun', list: 'outgoing', color: '#75C760' },
+  { name: 'bills', list: 'outgoing', color: '#C7609E' },
+  { name: 'travel', list: 'outgoing', color: '#8A8F98' },
+  { name: 'miscellaneous', list: 'outgoing', color: '#B3C760' },
+  { name: 'income', list: 'incoming', color: '#608AC7' },
+  { name: 'other', list: 'incoming', color: '#60C78A' },
+];
+
+// Seeds a brand-new user's independent categories set: for EACH account
+// (Spending, Savings), inserts all 11 non-system seed categories, stamped
+// `user_id`, `is_system = 0`, and that `account_id` — 22 rows total. Called
+// for every signup that is NOT the one-time legacy claim (see authService.js
+// signup()), and always for guest accounts (guests never claim legacy data).
+// `exec` (optional): threaded through so authService's signup can run this
+// inside its own single interactive transaction (see
+// transactionService.js's EXECUTOR-THREADING doc for why a bare client
+// won't do here).
+export async function seedCategoriesForUser(userId, exec = client) {
+  for (const accountId of Object.values(ACCOUNTS)) {
+    for (const seed of SEED_CATEGORIES) {
+      await exec.execute({
+        sql: `
+          INSERT INTO categories (name, list, is_system, color, account_id, user_id)
+          VALUES (:name, :list, 0, :color, :accountId, :userId)
+        `,
+        args: { name: seed.name, list: seed.list, color: seed.color, accountId, userId },
+      });
+    }
+  }
+}
+
 function assertValidName(name) {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new ValidationError('name is required');
@@ -129,12 +173,12 @@ function assignColor(name, usedColors) {
   return hslToHex(bestHue, 48, 58);
 }
 
-export async function listCategories(accountId) {
+export async function listCategories(accountId, userId) {
   assertValidAccountId(accountId);
   const rows = (
     await client.execute({
-      sql: 'SELECT id, name, list, color FROM categories WHERE is_system = 0 AND account_id = :accountId ORDER BY id',
-      args: { accountId: Number(accountId) },
+      sql: 'SELECT id, name, list, color FROM categories WHERE is_system = 0 AND account_id = :accountId AND user_id = :userId ORDER BY id',
+      args: { accountId: Number(accountId), userId },
     })
   ).rows;
   return {
@@ -149,7 +193,7 @@ export async function listCategories(accountId) {
 // createTransaction/createTransfer — a plain client.execute runs on a
 // different connection than an already-open transaction and would silently
 // lose atomicity across the batch (see team board Batch 8 contract).
-export async function createCategory({ name, list, account_id }, exec = client) {
+export async function createCategory({ name, list, account_id }, userId, exec = client) {
   const trimmedName = assertValidName(name);
   assertValidList(list);
   assertValidAccountId(account_id);
@@ -157,8 +201,8 @@ export async function createCategory({ name, list, account_id }, exec = client) 
 
   const duplicate = (
     await exec.execute({
-      sql: 'SELECT id FROM categories WHERE lower(name) = lower(:name) AND list = :list AND account_id = :accountId',
-      args: { name: trimmedName, list, accountId },
+      sql: 'SELECT id FROM categories WHERE lower(name) = lower(:name) AND list = :list AND account_id = :accountId AND user_id = :userId',
+      args: { name: trimmedName, list, accountId, userId },
     })
   ).rows[0];
   if (duplicate) {
@@ -167,22 +211,36 @@ export async function createCategory({ name, list, account_id }, exec = client) 
 
   // Each account independently consumes the full palette, rather than
   // sharing one pool, since Spending and Savings categories are now
-  // entirely separate lists.
+  // entirely separate lists. Scoped per-user too — a per-user palette, not
+  // shared across users on the same account.
   const accountColors = (
-    await exec.execute({ sql: 'SELECT color FROM categories WHERE account_id = :accountId', args: { accountId } })
+    await exec.execute({
+      sql: 'SELECT color FROM categories WHERE account_id = :accountId AND user_id = :userId',
+      args: { accountId, userId },
+    })
   ).rows.map((r) => r.color);
   const color = assignColor(trimmedName, accountColors);
 
   const result = await exec.execute({
-    sql: 'INSERT INTO categories (name, list, is_system, color, account_id) VALUES (:name, :list, 0, :color, :accountId)',
-    args: { name: trimmedName, list, color, accountId },
+    sql: 'INSERT INTO categories (name, list, is_system, color, account_id, user_id) VALUES (:name, :list, 0, :color, :accountId, :userId)',
+    args: { name: trimmedName, list, color, accountId, userId },
   });
 
   return { id: Number(result.lastInsertRowid), name: trimmedName, list, color, account_id: accountId };
 }
 
-export async function deleteCategory(id) {
-  const category = (await client.execute({ sql: 'SELECT * FROM categories WHERE id = :id', args: { id } })).rows[0];
+export async function deleteCategory(id, userId) {
+  // Lookup uses the same read exception as the other category reads
+  // (own rows OR system rows) so a system category is actually found (and
+  // correctly rejected with the is_system message below) rather than
+  // silently 404ing; a non-system row found here is guaranteed to belong to
+  // this user, since the only other rows this WHERE can match are is_system.
+  const category = (
+    await client.execute({
+      sql: 'SELECT * FROM categories WHERE id = :id AND (user_id = :userId OR is_system = 1)',
+      args: { id, userId },
+    })
+  ).rows[0];
   if (!category) {
     throw new NotFoundError('category not found');
   }
@@ -192,8 +250,8 @@ export async function deleteCategory(id) {
 
   const txnCount = (
     await client.execute({
-      sql: 'SELECT COUNT(*) AS count FROM transactions WHERE category = :name AND account_id = :accountId',
-      args: { name: category.name, accountId: category.account_id },
+      sql: 'SELECT COUNT(*) AS count FROM transactions WHERE category = :name AND account_id = :accountId AND user_id = :userId',
+      args: { name: category.name, accountId: category.account_id, userId },
     })
   ).rows[0].count;
   // Budgets are Spending-only (see budgetService), so a Savings category of
@@ -202,8 +260,8 @@ export async function deleteCategory(id) {
   const budgetCount = category.account_id === ACCOUNTS.SPENDING
     ? (
       await client.execute({
-        sql: 'SELECT COUNT(*) AS count FROM budgets WHERE category = :name',
-        args: { name: category.name },
+        sql: 'SELECT COUNT(*) AS count FROM budgets WHERE category = :name AND user_id = :userId',
+        args: { name: category.name, userId },
       })
     ).rows[0].count
     : 0;
@@ -223,16 +281,27 @@ export async function deleteCategory(id) {
     );
   }
 
-  await client.execute({ sql: 'DELETE FROM categories WHERE id = :id', args: { id } });
+  // Scoped delete: never touches another user's row, and (defense-in-depth,
+  // matching the contract's exact wording) never a system row even though
+  // the lookup above already guarantees this branch only reaches here for a
+  // non-system row owned by this user.
+  await client.execute({
+    sql: 'DELETE FROM categories WHERE id = :id AND user_id = :userId',
+    args: { id, userId },
+  });
 }
 
 // Outgoing category names a normal transaction may use for the given
-// account (excludes is_system, e.g. transfer-out).
-export async function getOutgoingNames(accountId, exec = client) {
+// account (excludes is_system, e.g. transfer-out). Scoped to the caller's
+// own categories — the `is_system = 0` filter already present here makes
+// the contract's `(user_id = :userId OR is_system = 1)` read-exception a
+// no-op (is_system = 0 rules out the is_system = 1 branch), so it reduces
+// to a plain `AND user_id = :userId`.
+export async function getOutgoingNames(accountId, userId, exec = client) {
   const rows = (
     await exec.execute({
-      sql: "SELECT name FROM categories WHERE list = 'outgoing' AND is_system = 0 AND account_id = :accountId ORDER BY id",
-      args: { accountId: Number(accountId) },
+      sql: "SELECT name FROM categories WHERE list = 'outgoing' AND is_system = 0 AND account_id = :accountId AND user_id = :userId ORDER BY id",
+      args: { accountId: Number(accountId), userId },
     })
   ).rows;
   return rows.map((r) => r.name);
@@ -242,11 +311,11 @@ export async function getOutgoingNames(accountId, exec = client) {
 // account (excludes is_system, e.g. transfer-in). Symmetric counterpart to
 // getOutgoingNames() — used by importService.js's category skip-if-exists
 // guard for incoming-list category drafts.
-export async function getIncomingNames(accountId, exec = client) {
+export async function getIncomingNames(accountId, userId, exec = client) {
   const rows = (
     await exec.execute({
-      sql: "SELECT name FROM categories WHERE list = 'incoming' AND is_system = 0 AND account_id = :accountId ORDER BY id",
-      args: { accountId: Number(accountId) },
+      sql: "SELECT name FROM categories WHERE list = 'incoming' AND is_system = 0 AND account_id = :accountId AND user_id = :userId ORDER BY id",
+      args: { accountId: Number(accountId), userId },
     })
   ).rows;
   return rows.map((r) => r.name);
@@ -259,22 +328,22 @@ export async function getIncomingNames(accountId, exec = client) {
 // semantically-named entry point independent of how "budgetable" is defined
 // if that ever diverges from "all non-system outgoing categories". Always
 // called with ACCOUNTS.SPENDING by budgetService — budgeting is Spending-only.
-export async function getBudgetableNames(accountId) {
-  return getOutgoingNames(accountId);
+export async function getBudgetableNames(accountId, userId) {
+  return getOutgoingNames(accountId, userId);
 }
 
 // Validates a normal (non-transfer) transaction's category against the live
 // categories table: must exist, be non-system, and belong to the list
 // matching the transaction's direction ('out' -> outgoing, 'in' -> incoming),
 // scoped to the transaction's own account (Spending/Savings categories are
-// independent lists).
-export async function isValidNormalCategory(category, direction, accountId, exec = client) {
+// independent lists) AND to the calling user (per-user categories).
+export async function isValidNormalCategory(category, direction, accountId, userId, exec = client) {
   if (!category) return false;
   const list = direction === 'out' ? 'outgoing' : 'incoming';
   const row = (
     await exec.execute({
-      sql: 'SELECT id FROM categories WHERE name = :name AND list = :list AND is_system = 0 AND account_id = :accountId',
-      args: { name: category, list, accountId: Number(accountId) },
+      sql: 'SELECT id FROM categories WHERE name = :name AND list = :list AND is_system = 0 AND account_id = :accountId AND user_id = :userId',
+      args: { name: category, list, accountId: Number(accountId), userId },
     })
   ).rows[0];
   return Boolean(row);

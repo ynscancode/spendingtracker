@@ -17,7 +17,7 @@ function handleError(res, err) {
 router.get('/', async (req, res) => {
   try {
     const { month } = req.query;
-    const budgets = await getBudgetsForMonth(month);
+    const budgets = await getBudgetsForMonth(month, req.userId);
     res.json({ month, budgets });
   } catch (err) {
     handleError(res, err);
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
 
 router.put('/', async (req, res) => {
   try {
-    const result = await setBudget(req.body);
+    const result = await setBudget(req.body, req.userId);
     res.json(result);
   } catch (err) {
     handleError(res, err);

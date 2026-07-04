@@ -1,9 +1,22 @@
 const BASE = 'http://localhost:4000/api';
 
+// BATCH 11 (user auth): every request now needs the static API_TOKEN (if the
+// server has one configured, via X-API-Token — moved off Authorization) AND
+// a per-run user JWT (via Authorization: Bearer <jwt>), obtained by
+// signing up a fresh throwaway user before the rest of the flow runs. The
+// username is randomized per run so re-running this script never collides
+// with a prior run's leftover user.
+const API_TOKEN = process.env.API_TOKEN;
+let authToken = null;
+
 async function req(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (API_TOKEN) headers['X-API-Token'] = API_TOKEN;
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -14,12 +27,23 @@ async function req(method, path, body) {
   return data;
 }
 
+async function signUpThrowawayUser() {
+  const username = `smoketest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const password = 'smoke-test-password-1';
+  const { token } = await req('POST', '/auth/signup', { username, password });
+  authToken = token;
+  console.log(`  signed up throwaway user "${username}" for this run`);
+}
+
 function assert(cond, msg) {
   if (!cond) throw new Error(`ASSERTION FAILED: ${msg}`);
   console.log(`  ok: ${msg}`);
 }
 
 async function main() {
+  console.log('0. Sign up a throwaway user for this run (BATCH 11 user auth)');
+  await signUpThrowawayUser();
+
   console.log('1. Accounts before any transactions');
   const accountsBefore = await req('GET', '/accounts');
   console.log(accountsBefore);
@@ -142,7 +166,11 @@ async function main() {
     'transfer-in/transfer-out excluded from GET /categories'
   );
   const misc = categoriesBefore.outgoing.find((c) => c.name === 'miscellaneous');
-  assert(misc && misc.color === '#CBAE4D', `miscellaneous seeded with frozen color #CBAE4D (got ${misc && misc.color})`);
+  // #B3C760 is the current seed color (003_categories.sql / 005_recolor_categories.sql's
+  // 36-degree hue-spacing scheme, also mirrored by SEED_CATEGORIES in
+  // categoryService.js for BATCH 11's per-user seeding) — this assertion was
+  // stale from before that recolor and is corrected here, unrelated to auth.
+  assert(misc && misc.color === '#B3C760', `miscellaneous seeded with frozen color #B3C760 (got ${misc && misc.color})`);
 
   console.log('11b. GET categories with no account_id -> 400');
   let missingAccountIdRejected = false;

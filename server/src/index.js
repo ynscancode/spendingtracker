@@ -7,6 +7,8 @@ import summaryRouter from './routes/summary.js';
 import budgetsRouter from './routes/budgets.js';
 import categoriesRouter from './routes/categories.js';
 import importsRouter from './routes/imports.js';
+import authRouter from './routes/auth.js';
+import requireUser from './middleware/requireUser.js';
 
 const app = express();
 
@@ -24,34 +26,46 @@ if (corsOrigin) {
   app.use(cors());
 }
 
-// Simple bearer-token auth gate. When API_TOKEN is set (production), every
-// request must carry `Authorization: Bearer <token>` — or, for the export
-// download endpoint which uses direct anchor navigation (can't set headers),
-// a `?token=<token>` query param is also accepted on that one route.
-// When API_TOKEN is unset (local dev), the gate is skipped entirely.
+// Simple static-token infra gate ("can you talk to this API at all") — a
+// SEPARATE, orthogonal concern from user identity (the requireUser JWT gate
+// below, "who are you"). When API_TOKEN is set (production), every request
+// must carry `X-API-Token: <token>` — moved off `Authorization` (BATCH 11
+// tech-lead contract section A) to free that header for the user JWT — or,
+// for the export download endpoint which uses direct anchor navigation
+// (can't set headers), a `?token=<token>` query param is also accepted on
+// that one route. When API_TOKEN is unset (local dev), the gate is skipped
+// entirely.
 const apiToken = process.env.API_TOKEN;
 if (apiToken) {
   app.use((req, res, next) => {
     if (req.method === 'OPTIONS') return next();
-    const bearer = req.headers['authorization'];
+    const headerToken = req.headers['x-api-token'];
     const queryToken = req.query.token;
-    if (bearer === `Bearer ${apiToken}` || queryToken === apiToken) return next();
+    if (headerToken === apiToken || queryToken === apiToken) return next();
     res.status(401).json({ error: 'Unauthorized' });
   });
 }
 
 app.use(express.json());
 
-app.use('/api/accounts', accountsRouter);
-app.use('/api/transactions', transactionsRouter);
-app.use('/api/summary', summaryRouter);
-app.use('/api/budgets', budgetsRouter);
-app.use('/api/categories', categoriesRouter);
+// /api/auth is NOT wrapped in requireUser — signup/login/guest/logout must
+// be reachable with only the static token (no user JWT exists yet); GET /me
+// applies requireUser INSIDE the router itself.
+app.use('/api/auth', authRouter);
+
+app.use('/api/accounts', requireUser, accountsRouter);
+app.use('/api/transactions', requireUser, transactionsRouter);
+app.use('/api/summary', requireUser, summaryRouter);
+app.use('/api/budgets', requireUser, budgetsRouter);
+app.use('/api/categories', requireUser, categoriesRouter);
 // Larger JSON body limit scoped to this router only: a ~20k-row commit
 // payload (~2-4MB) would exceed express.json()'s default 100KB cap and get
 // rejected with an HTML 413 before reaching the route. The global
 // express.json() above stays at its default for every other router.
-app.use('/api/imports', express.json({ limit: '25mb' }), importsRouter);
+// requireUser goes BEFORE the imports-specific json parser (matches every
+// other router's ordering relative to auth, even though this one also has
+// its own body-parsing middleware after it).
+app.use('/api/imports', requireUser, express.json({ limit: '25mb' }), importsRouter);
 
 const PORT = process.env.PORT || 4000;
 // On Vercel this module is imported by api/index.js as a serverless handler

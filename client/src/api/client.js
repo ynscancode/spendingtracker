@@ -7,6 +7,36 @@
 export const API_BASE = import.meta.env.VITE_API_URL || '';
 export const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
 
+// BATCH 11 (user auth): the active user's JWT lives in localStorage, not a
+// module-level variable — read fresh on every request (mirrors the server's
+// `readConfig()` pattern) so switching accounts via AuthContext takes effect
+// on the very next call with no reload needed. Key name matches the
+// tech-lead contract (`ledger.authToken`) exactly, since AuthContext reads/
+// writes the same key directly for the initial session-check-on-load.
+const AUTH_TOKEN_KEY = 'ledger.authToken';
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    else localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // localStorage unavailable (e.g. private mode) — session just won't
+    // persist across a reload; matches ThemeProvider's non-fatal handling.
+  }
+}
+
+export function clearAuthToken() {
+  setAuthToken(null);
+}
+
 // Exported so any caller that needs to build a raw request URL outside this
 // module's request()/requestFormData() wrappers (currently: ExportModal.jsx's
 // direct anchor-navigation download, which can't go through fetch()) uses the
@@ -15,8 +45,29 @@ export function apiUrl(path) {
   return `${API_BASE}/api${path}`;
 }
 
+// BATCH 11 — two orthogonal gates, one header each (tech-lead contract A/G):
+// the static API_TOKEN moved OFF `Authorization` onto `X-API-Token`, freeing
+// `Authorization: Bearer <jwt>` for the per-user session token. Both are sent
+// whenever present; neither implies the other.
 function authHeader() {
-  return API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+  const headers = {};
+  if (API_TOKEN) headers['X-API-Token'] = API_TOKEN;
+  const authToken = getAuthToken();
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  return headers;
+}
+
+// Any 401 (other than from the auth endpoints themselves, whose 401s are
+// ordinary form-validation results a caller handles inline — see
+// AuthForms.jsx) means the active session is dead (expired/rotated secret/
+// revoked). Broadcasting it lets AuthContext react from anywhere in the
+// app — not just from calls it made directly — and drop back to the auth
+// screen, per contract G ("On any 401: clear ledger.authToken and drop to
+// the auth screen").
+function reportIfUnauthorized(status, path) {
+  if (status === 401 && !path.startsWith('/auth/')) {
+    window.dispatchEvent(new CustomEvent('ledger:unauthorized'));
+  }
 }
 
 async function request(method, path, body) {
@@ -28,7 +79,10 @@ async function request(method, path, body) {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    throw new Error(data?.error || `${method} ${path} failed with ${res.status}`);
+    reportIfUnauthorized(res.status, path);
+    const err = new Error(data?.error || `${method} ${path} failed with ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -42,7 +96,10 @@ async function requestFormData(method, path, formData) {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    throw new Error(data?.error || `${method} ${path} failed with ${res.status}`);
+    reportIfUnauthorized(res.status, path);
+    const err = new Error(data?.error || `${method} ${path} failed with ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -83,4 +140,14 @@ export const api = {
   },
   commitImport: (payload) => request('POST', '/imports/commit', payload),
   suggestImportMapping: (payload) => request('POST', '/imports/suggest', payload),
+
+  // BATCH 11 — /api/auth/* (routes/auth.js). signup/login/guest/logout are
+  // JWT-exempt (reachable with only the static token, per contract A); `me`
+  // requires a valid Authorization: Bearer <jwt> and is used for the
+  // session-check-on-load in AuthContext.
+  signup: ({ username, password }) => request('POST', '/auth/signup', { username, password }),
+  login: ({ username, password }) => request('POST', '/auth/login', { username, password }),
+  guest: () => request('POST', '/auth/guest', {}),
+  me: () => request('GET', '/auth/me'),
+  logout: () => request('POST', '/auth/logout', {}),
 };

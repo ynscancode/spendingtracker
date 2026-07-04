@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import MonthSwitcher from '../layout/MonthSwitcher.jsx'
 import { monthRangeFor, monthLabel } from '../../utils/dateUtils.js'
-import { apiUrl, API_TOKEN } from '../../api/client.js'
+import { apiUrl, API_TOKEN, getAuthToken } from '../../api/client.js'
 
 // Mirrors the portal/overlay/panel conventions of TransactionModal.jsx and
 // ClearHistoryModal.jsx (.modal-overlay / .modal-panel / .modal-head /
@@ -50,7 +50,13 @@ export default function ExportModal({ month, activity, onClose }) {
       params.set('to', to)
     }
     const filename = scope === 'all' ? 'transactions-all.xlsx' : `transactions-${pickedMonth}.xlsx`
+    // BATCH 11: anchor-nav can't set headers, so both gates fall back to
+    // query params here — `token` (static) unchanged, `authToken` (user JWT)
+    // added per the tech-lead contract (requireUser's export-only query
+    // fallback, path-scoped by the security review's FIX 1).
     if (API_TOKEN) params.set('token', API_TOKEN)
+    const authToken = getAuthToken()
+    if (authToken) params.set('authToken', authToken)
     const link = document.createElement('a')
     link.href = `${apiUrl('/transactions/export')}?${params.toString()}`
     link.download = filename

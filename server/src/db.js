@@ -56,6 +56,32 @@ async function runMigrations() {
   if (hasOldSeedColor) {
     await applyMigration('005_recolor_categories.sql');
   }
+
+  const hasUsersTable = await tableExists('users');
+  if (!hasUsersTable) {
+    await applyMigration('006_users.sql');
+  }
+
+  const hasTransactionsUserIdColumn = (
+    await client.execute("SELECT 1 FROM pragma_table_info('transactions') WHERE name = 'user_id'")
+  ).rows[0] !== undefined;
+  if (!hasTransactionsUserIdColumn) {
+    await applyMigration('007_transactions_userid.sql');
+  }
+
+  const hasCategoriesUserIdColumn = (
+    await client.execute("SELECT 1 FROM pragma_table_info('categories') WHERE name = 'user_id'")
+  ).rows[0] !== undefined;
+  if (!hasCategoriesUserIdColumn) {
+    await applyMigration('008_categories_userid.sql');
+  }
+
+  const hasBudgetsUserIdColumn = (
+    await client.execute("SELECT 1 FROM pragma_table_info('budgets') WHERE name = 'user_id'")
+  ).rows[0] !== undefined;
+  if (!hasBudgetsUserIdColumn) {
+    await applyMigration('009_budgets_userid.sql');
+  }
 }
 
 // Top-level await: this suspends the whole ESM module graph (index.js ->

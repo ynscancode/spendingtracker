@@ -1,19 +1,22 @@
 import client from '../db.js';
 import { ACCOUNTS } from '../constants/categories.js';
 
-export async function getDailySummary(date) {
+export async function getDailySummary(date, userId) {
   const combined = (
     await client.execute({
       sql: `
         SELECT
           COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS total_in,
           COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS total_out
-        FROM transactions WHERE date = :date
+        FROM transactions WHERE date = :date AND user_id = :userId
       `,
-      args: { date },
+      args: { date, userId },
     })
   ).rows[0];
 
+  // The user_id predicate lives in the JOIN condition (not the WHERE) so a
+  // zero-activity account for this user still produces a row (LEFT JOIN
+  // preserved) instead of being filtered out entirely.
   const perAccount = (
     await client.execute({
       sql: `
@@ -21,10 +24,10 @@ export async function getDailySummary(date) {
           COALESCE(SUM(CASE WHEN t.direction = 'in' THEN t.amount ELSE 0 END), 0) AS total_in,
           COALESCE(SUM(CASE WHEN t.direction = 'out' THEN t.amount ELSE 0 END), 0) AS total_out
         FROM accounts a
-        LEFT JOIN transactions t ON t.account_id = a.id AND t.date = :date
+        LEFT JOIN transactions t ON t.account_id = a.id AND t.date = :date AND t.user_id = :userId
         GROUP BY a.id, a.name
       `,
-      args: { date },
+      args: { date, userId },
     })
   ).rows;
 
@@ -33,11 +36,11 @@ export async function getDailySummary(date) {
       sql: `
         SELECT category, SUM(amount) AS total
         FROM transactions
-        WHERE date = :date AND direction = 'out' AND is_transfer = 0
+        WHERE date = :date AND direction = 'out' AND is_transfer = 0 AND user_id = :userId
         GROUP BY category
         ORDER BY total DESC
       `,
-      args: { date },
+      args: { date, userId },
     })
   ).rows;
 
@@ -46,18 +49,18 @@ export async function getDailySummary(date) {
       sql: `
         SELECT category, SUM(amount) AS total
         FROM transactions
-        WHERE date = :date AND direction = 'in' AND is_transfer = 0
+        WHERE date = :date AND direction = 'in' AND is_transfer = 0 AND user_id = :userId
         GROUP BY category
         ORDER BY total DESC
       `,
-      args: { date },
+      args: { date, userId },
     })
   ).rows;
 
   return { date, combined, perAccount, byCategoryIn, byCategoryOut };
 }
 
-export async function getMonthlySummary(month) {
+export async function getMonthlySummary(month, userId) {
   const totals = (
     await client.execute({
       sql: `
@@ -65,9 +68,9 @@ export async function getMonthlySummary(month) {
           COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS total_in,
           COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS total_out
         FROM transactions
-        WHERE strftime('%Y-%m', date) = :month AND is_transfer = 0
+        WHERE strftime('%Y-%m', date) = :month AND is_transfer = 0 AND user_id = :userId
       `,
-      args: { month },
+      args: { month, userId },
     })
   ).rows[0];
 
@@ -76,11 +79,11 @@ export async function getMonthlySummary(month) {
       sql: `
         SELECT category, SUM(amount) AS total
         FROM transactions
-        WHERE strftime('%Y-%m', date) = :month AND direction = 'out' AND is_transfer = 0
+        WHERE strftime('%Y-%m', date) = :month AND direction = 'out' AND is_transfer = 0 AND user_id = :userId
         GROUP BY category
         ORDER BY total DESC
       `,
-      args: { month },
+      args: { month, userId },
     })
   ).rows;
 
@@ -89,11 +92,11 @@ export async function getMonthlySummary(month) {
       sql: `
         SELECT category, SUM(amount) AS total
         FROM transactions
-        WHERE strftime('%Y-%m', date) = :month AND direction = 'in' AND is_transfer = 0
+        WHERE strftime('%Y-%m', date) = :month AND direction = 'in' AND is_transfer = 0 AND user_id = :userId
         GROUP BY category
         ORDER BY total DESC
       `,
-      args: { month },
+      args: { month, userId },
     })
   ).rows;
 
@@ -106,14 +109,18 @@ export async function getMonthlySummary(month) {
   };
 }
 
-export async function getTransactionActivity() {
+export async function getTransactionActivity(userId) {
   const rows = (
-    await client.execute(`
-      SELECT account_id, strftime('%Y-%m', date) AS month
-      FROM transactions
-      GROUP BY account_id, strftime('%Y-%m', date)
-      ORDER BY month
-    `)
+    await client.execute({
+      sql: `
+        SELECT account_id, strftime('%Y-%m', date) AS month
+        FROM transactions
+        WHERE user_id = :userId
+        GROUP BY account_id, strftime('%Y-%m', date)
+        ORDER BY month
+      `,
+      args: { userId },
+    })
   ).rows;
 
   const byAccount = {};
