@@ -8,9 +8,9 @@ const CONFIRM_PHRASE = 'DELETE'
 
 // Two-step, high-friction confirmation for an irreversible, destructive
 // action (wiping every transaction row across both accounts). Mirrors the
-// portal/overlay/panel conventions of TransactionModal.jsx and
-// ImportModal.jsx exactly (.modal-overlay / .modal-panel), so it looks and
-// behaves consistently with every other modal in the app.
+// portal/overlay/panel conventions of TransactionModal.jsx exactly
+// (.modal-overlay / .modal-panel), so it looks and behaves consistently
+// with every other modal in the app.
 //
 // Security-critical invariant: there is no code path that fires the delete
 // without the typed phrase exactly matching CONFIRM_PHRASE. The final button

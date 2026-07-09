@@ -6,7 +6,6 @@ import transactionsRouter from './routes/transactions.js';
 import summaryRouter from './routes/summary.js';
 import budgetsRouter from './routes/budgets.js';
 import categoriesRouter from './routes/categories.js';
-import importsRouter from './routes/imports.js';
 import authRouter from './routes/auth.js';
 import requireUser from './middleware/requireUser.js';
 
@@ -58,14 +57,6 @@ app.use('/api/transactions', requireUser, transactionsRouter);
 app.use('/api/summary', requireUser, summaryRouter);
 app.use('/api/budgets', requireUser, budgetsRouter);
 app.use('/api/categories', requireUser, categoriesRouter);
-// Larger JSON body limit scoped to this router only: a ~20k-row commit
-// payload (~2-4MB) would exceed express.json()'s default 100KB cap and get
-// rejected with an HTML 413 before reaching the route. The global
-// express.json() above stays at its default for every other router.
-// requireUser goes BEFORE the imports-specific json parser (matches every
-// other router's ordering relative to auth, even though this one also has
-// its own body-parsing middleware after it).
-app.use('/api/imports', requireUser, express.json({ limit: '25mb' }), importsRouter);
 
 const PORT = process.env.PORT || 4000;
 // On Vercel this module is imported by api/index.js as a serverless handler

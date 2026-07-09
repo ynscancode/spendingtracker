@@ -188,8 +188,8 @@ export async function listCategories(accountId, userId) {
 }
 
 // `exec` (optional): a libsql interactive-transaction handle, defaulting to
-// the module `client`. Threaded through so importService.commitImport can
-// run this inside its own single transaction alongside
+// the module `client`. Threaded through so a caller that already owns an
+// open transaction can run this inside that same transaction alongside
 // createTransaction/createTransfer — a plain client.execute runs on a
 // different connection than an already-open transaction and would silently
 // lose atomicity across the batch (see team board Batch 8 contract).
@@ -309,8 +309,7 @@ export async function getOutgoingNames(accountId, userId, exec = client) {
 
 // Incoming category names a normal transaction may use for the given
 // account (excludes is_system, e.g. transfer-in). Symmetric counterpart to
-// getOutgoingNames() — used by importService.js's category skip-if-exists
-// guard for incoming-list category drafts.
+// getOutgoingNames().
 export async function getIncomingNames(accountId, userId, exec = client) {
   const rows = (
     await exec.execute({

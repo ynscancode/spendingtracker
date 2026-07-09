@@ -6,9 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "smoke-test": "node src/scripts/smokeTest.js",
-    "import-smoke-test": "node src/scripts/importSmokeTest.js",
-    "import-llm-test": "node src/scripts/importLlmTest.js"
+    "smoke-test": "node src/scripts/smokeTest.js"
   },
   "keywords": [],
   "author": "",
