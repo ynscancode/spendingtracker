@@ -920,6 +920,14 @@ select {
   display: flex;
   align-items: flex-start;
   gap: 40px;
+  /* Wrap whenever the three controls (view switch + month + Show) don't fit
+     (~770px intrinsic): between 769px and ~900px the row used to overflow
+     the content box. Column gap stays 40 (activity-info room); row gap 12
+     matches the verified mobile wrap so the absolutely-positioned
+     "Earliest: ..." line never collides with a wrapped row below. */
+  flex-wrap: wrap;
+  row-gap: 12px;
+  max-width: 100%;
 }
 
 .cat-bar-track {
@@ -2501,7 +2509,6 @@ td {
      this inner block can also wrap/shrink, nothing left in this row forces
      >100vw. */
   .breakdown-heading-controls {
-    flex-wrap: wrap;
     gap: 12px;
     width: 100%;
   }
@@ -2549,6 +2556,12 @@ td {
 
   .pill-group {
     order: 1;
+  }
+
+  /* The header reorder above targets the theme switcher; the Breakdown view
+     switch is also a .pill-group and must stay first in its row. */
+  .breakdown-heading-controls > .pill-group {
+    order: 0;
   }
 
   .auth-card {

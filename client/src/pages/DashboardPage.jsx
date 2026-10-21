@@ -13,6 +13,8 @@ import DonutChart from '../components/breakdown/DonutChart.jsx'
 import { buildDonutSegments } from '../utils/donutMath.js'
 import CategoryBarList from '../components/breakdown/CategoryBarList.jsx'
 import BreakdownControls from '../components/breakdown/BreakdownControls.jsx'
+import BreakdownViewSwitch from '../components/breakdown/BreakdownViewSwitch.jsx'
+import { realFlows, sumAmounts, combinedBreakdown, accountBreakdown } from '../utils/breakdown.js'
 import { fillColorFor, suffixFor, classifyBudgetHealth } from '../utils/budgetHealth.js'
 
 function daysInMonth(monthStr) {
@@ -20,20 +22,7 @@ function daysInMonth(monthStr) {
   return new Date(year, month, 0).getDate()
 }
 
-// Derive a category breakdown for one account from the raw transaction
-// list, excluding transfers (internal movement, not real income/spend).
-function breakdownFor(transactions, accountId, direction, colorFor) {
-  const totals = {}
-  transactions.forEach((t) => {
-    if (t.account_id !== accountId || t.is_transfer || t.direction !== direction) return
-    totals[t.category] = (totals[t.category] || 0) + t.amount
-  })
-  return Object.entries(totals)
-    .map(([category, value]) => ({ category, value, color: colorFor(category) }))
-    .sort((a, b) => b.value - a.value)
-}
-
-// Simple two-bar money-in vs money-out comparison for one account, scaled
+// Simple two-bar money-in vs money-out comparison for the selected view, scaled
 // relative to whichever of the two totals is larger. Bars are vertical to
 // sit naturally alongside the donut pair above. Always shows both labels
 // and dollar values so the comparison isn't color-only.
@@ -97,13 +86,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [breakdownMode, setBreakdownMode] = useState('both')
+  const [breakdownView, setBreakdownView] = useState('combined')
   const [dailyBudget, setDailyBudget] = useDailyBudget()
   const [editingBudget, setEditingBudget] = useState(false)
   const [budgetDraft, setBudgetDraft] = useState('')
 
   // Overview is Spending-only by design — there is no account selector on
-  // this page. The Breakdown section at the bottom is the one exception:
-  // it remains unscoped and always shows both accounts.
+  // this page. Exceptions: the Breakdown section (own Combined | Spending |
+  // Savings view switch, default Combined) and the Monthly insights money
+  // in/out/net/savings-rate figures (Combined, both accounts), which
+  // aren't Spending-scoped. The daily spending bars stay Spending-only.
   const scopeAccountId = ACCOUNTS.SPENDING
 
   const month = currentMonthStr()
@@ -205,16 +197,18 @@ export default function DashboardPage() {
 
   // Everything below is scoped to the selected account.
   const scopedTransactions = monthTransactions.filter((t) => t.account_id === scopeAccountId)
-  // Breakdown-scoped equivalent, driving only Monthly insights + the
-  // Breakdown sections (selectedMonth, not the page's current month).
+  // Breakdown-scoped equivalent (selectedMonth, not the page's current
+  // month), Spending-only: drives just the Monthly insights daily bar chart.
   const scopedBreakdownTransactions = breakdownTransactions.filter((t) => t.account_id === scopeAccountId)
 
-  // Monthly insights money in/out/net: real money movement only, excludes
-  // transfers (distinct from the balance-delta figures above, which
-  // intentionally include transfers). Scoped to selectedMonth, not the
-  // page's current month.
-  const sumIn = scopedBreakdownTransactions.filter((t) => t.direction === 'in' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
-  const sumOut = scopedBreakdownTransactions.filter((t) => t.direction === 'out' && !t.is_transfer).reduce((s, t) => s + t.amount, 0)
+  // Monthly insights money in/out/net: real money movement across BOTH
+  // accounts (Combined), excludes transfers (distinct from the balance-delta
+  // figures above, which intentionally include transfers). Uses the same
+  // realFlows filter as the Combined donuts. Scoped to selectedMonth, not
+  // the page's current month. The daily spending bar chart below stays
+  // Spending-only.
+  const sumIn = sumAmounts(realFlows(breakdownTransactions, 'in'))
+  const sumOut = sumAmounts(realFlows(breakdownTransactions, 'out'))
   const net = sumIn - sumOut
   const savingsRate = sumIn > 0 ? Math.round((net / sumIn) * 100) : 0
 
@@ -347,18 +341,28 @@ export default function DashboardPage() {
       }
     })
 
-  // Breakdown section: always shows both accounts, unaffected by the
-  // page being Spending-scoped elsewhere (same treatment as Net worth).
+  // Breakdown section: one donut pair driven by the Combined | Spending |
+  // Savings switch, unaffected by the page being Spending-scoped elsewhere.
+  // Combined = both accounts as one pot, transfers excluded (same filter as
+  // Monthly insights). Spending/Savings = that account only, with transfers
+  // shown as a neutral segment so in - out equals its net balance change.
   // Scoped to selectedMonth via breakdownTransactions, not the page's
   // current month.
-  const spendOut = breakdownFor(breakdownTransactions, ACCOUNTS.SPENDING, 'out', (cat) => colorFor(ACCOUNTS.SPENDING, cat))
-  const spendIn = breakdownFor(breakdownTransactions, ACCOUNTS.SPENDING, 'in', (cat) => colorFor(ACCOUNTS.SPENDING, cat))
-  const saveOut = breakdownFor(breakdownTransactions, ACCOUNTS.SAVINGS, 'out', (cat) => colorFor(ACCOUNTS.SAVINGS, cat))
-  const saveIn = breakdownFor(breakdownTransactions, ACCOUNTS.SAVINGS, 'in', (cat) => colorFor(ACCOUNTS.SAVINGS, cat))
-  const spendTotalOut = spendOut.reduce((s, c) => s + c.value, 0)
-  const spendTotalIn = spendIn.reduce((s, c) => s + c.value, 0)
-  const saveTotalOut = saveOut.reduce((s, c) => s + c.value, 0)
-  const saveTotalIn = saveIn.reduce((s, c) => s + c.value, 0)
+  let viewOut
+  let viewIn
+  if (breakdownView === 'combined') {
+    viewOut = combinedBreakdown(breakdownTransactions, 'out', colorFor)
+    viewIn = combinedBreakdown(breakdownTransactions, 'in', colorFor)
+  } else {
+    const viewAccountId = breakdownView === 'savings' ? ACCOUNTS.SAVINGS : ACCOUNTS.SPENDING
+    viewOut = accountBreakdown(breakdownTransactions, viewAccountId, 'out', colorFor)
+    viewIn = accountBreakdown(breakdownTransactions, viewAccountId, 'in', colorFor)
+  }
+  const viewTotalOut = viewOut.reduce((s, c) => s + c.value, 0)
+  const viewTotalIn = viewIn.reduce((s, c) => s + c.value, 0)
+  // Per-account views include transfers, so "Earned" would mislabel them.
+  const outCenterLabel = breakdownView === 'combined' ? 'Spent' : 'Out'
+  const inCenterLabel = breakdownView === 'combined' ? 'Earned' : 'In'
 
   const monthShortLabel = monthLabel(selectedMonth).split(' ')[0]
 
@@ -584,17 +588,22 @@ export default function DashboardPage() {
           below the switcher's actual input row. flex-start top-aligns both
           instead, and the h2's own marginTop then nudges it down onto the
           switcher's ~40px input row specifically (not the wrap's full,
-          taller box). The inner row's gap is widened (12 -> 40) and the
-          whole switcher+controls block is also pushed further right isn't
-          the goal here — rather, the WIDER gap shifts the MonthSwitcher
-          (left item) further LEFT relative to BreakdownControls (right
-          item, still flush against the row's right edge via `.card-row`'s
-          `justify-content: space-between`), so the switcher's now-wider,
-          single-line activity info has room to extend without reaching
-          BreakdownControls. */}
+          taller box). The inner row's gap is widened (12 -> 40) so the
+          MonthSwitcher's now-wider, single-line activity info has room to
+          extend rightward without reaching BreakdownControls (still flush
+          against the row's right edge via `.card-row`'s
+          `justify-content: space-between`). The view switch
+          (Combined | Spending | Savings) is deliberately the LEFTMOST
+          control, so that activity info still extends into the same free
+          gap toward BreakdownControls rather than underneath the switch.
+          Desktop widths: switch ~250 + switcher ~150 + Show ~190 + 2 x 40
+          gap ~ 670px, plus the ~90px heading, well inside the 1180px
+          container; the controls row wraps whenever it doesn't fit (base
+          `flex-wrap` in index.css, ~<900px) and gets a tighter gap at <=768px. */}
       <div className="card-row" style={{ marginTop: 30, marginBottom: 12, alignItems: 'flex-start' }}>
         <h2 style={{ margin: 0, marginTop: 13, font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>Breakdown</h2>
         <div className="breakdown-heading-controls">
+          <BreakdownViewSwitch view={breakdownView} onViewChange={setBreakdownView} />
           <MonthSwitcher
             month={selectedMonth}
             onChange={setSelectedMonth}
@@ -679,22 +688,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="page-eyebrow">Spending</div>
       <div className="two-col-grid">
-        <DonutCard icon="↑" iconColor="var(--red)" label="Money out" centerLabel="Spent" cats={spendOut} mode={breakdownMode} />
-        <DonutCard icon="↓" iconColor="var(--green)" label="Money in" centerLabel="Earned" cats={spendIn} mode={breakdownMode} />
+        <DonutCard icon="↑" iconColor="var(--red)" label="Money out" centerLabel={outCenterLabel} cats={viewOut} mode={breakdownMode} />
+        <DonutCard icon="↓" iconColor="var(--green)" label="Money in" centerLabel={inCenterLabel} cats={viewIn} mode={breakdownMode} />
       </div>
       <div style={{ marginTop: 16 }}>
-        <InOutCompareCard totalIn={spendTotalIn} totalOut={spendTotalOut} />
-      </div>
-
-      <div className="page-eyebrow" style={{ marginTop: 30 }}>Savings</div>
-      <div className="two-col-grid">
-        <DonutCard icon="↑" iconColor="var(--red)" label="Money out" centerLabel="Spent" cats={saveOut} mode={breakdownMode} />
-        <DonutCard icon="↓" iconColor="var(--green)" label="Money in" centerLabel="Earned" cats={saveIn} mode={breakdownMode} />
-      </div>
-      <div style={{ marginTop: 16 }}>
-        <InOutCompareCard totalIn={saveTotalIn} totalOut={saveTotalOut} />
+        <InOutCompareCard totalIn={viewTotalIn} totalOut={viewTotalOut} />
       </div>
 
       {modalOpen && (

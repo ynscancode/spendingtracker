@@ -15,7 +15,7 @@ export default function CategoryBarList({ categories, total, mode }) {
   return (
     <div className="donut-legend">
       {categories.map((c) => (
-        <div className="cat-bar-row" key={c.category}>
+        <div className="cat-bar-row" key={c.key ?? c.category}>
           <div className="cat-bar-row-head">
             <span className="cat-bar-row-label">
               <span className="cat-bar-row-swatch" style={{ background: c.color }} />

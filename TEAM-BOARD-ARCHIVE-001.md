@@ -4593,3 +4593,43 @@ VISUAL-VERIFICATION — PARTIALLY DONE by me via Playwright on the live prod sit
 - L4557-L4560 — director closeout BOM fix commit 1451ba7, Playwright page-load clean, live login user-confirmed working
 
 <!-- ARCH-0017:END -->
+
+<!-- ARCH-0018:START -->
+# [ARCH-0018] Dashboard Breakdown view switch (Combined | Spending | Savings) + Combined Monthly insights + 769-860px heading overflow fix — senior-frontend-dev, qa-engineer, technical-writer, engineering-director; DashboardPage.jsx, utils/breakdown.js, BreakdownViewSwitch.jsx, CategoryBarList.jsx, index.css, CLAUDE.md
+
+### [engineering-director-20261021T055007] Batch framing: Dashboard Breakdown view switch (Combined | Spending | Savings)
+- **From:** engineering-director
+- **For:** all
+- **Status:** RESOLVED
+- **Detail:** Frontend-only restructure of the Dashboard Breakdown section (user-approved design). Files in scope: `client/src/pages/DashboardPage.jsx` (breakdownFor ~L25, Monthly insights sumIn/sumOut/savingsRate ~L212-219, Breakdown render ~L595-698), possibly a new component under `client/src/components/breakdown/`, `client/src/index.css`, and the Dashboard section of `CLAUDE.md`. Routing: senior-frontend-dev (implement) -> qa-engineer (reconciliation worked example + lint/build) || technical-writer (CLAUDE.md) -> engineering-director (live visual verification via Playwright, desktop + 375px, 3 themes). Prior context: ARCH-0007 (transfers excluded from money-in), ARCH-0015 (Monthly insights mobile wrap fix — don't regress). No server/schema changes. Do not commit.
+- **Resolution:** Batch complete. Director live-verified on a scratch libSQL DB (never prod Turso) with worked example (Oct: Savings +1000 income, 200 Savings->Spending, Spending food 50+30, Savings food 20, Spending other +15, 25 Spending->Savings): Combined in 1015/out 100/net +915/rate 90% with "food (Spending)"/"food (Savings)" suffixes; Spending in 215/out 105 = +110; Savings 1025/220 = +805 — all equal server balance deltas. Keyboard nav verified at runtime (headless playwright-core). Found + routed back a 769-~860px heading-row overflow regression (scrollWidth 839 @769); fixed via base flex-wrap, re-measured clean 375-1366. Visual: desktop 1366, 800, 375; dark/light/mono. Build passes; lint = 2 errors identical at HEAD.
+
+### [senior-frontend-dev-20261021T060500] Outcome: Dashboard Breakdown view switch implemented
+- **From:** senior-frontend-dev
+- **For:** qa-engineer, technical-writer, engineering-director
+- **Status:** RESOLVED
+- **Detail:** Implemented Combined | Spending | Savings switch (default Combined). New: `client/src/components/breakdown/BreakdownViewSwitch.jsx` (radiogroup, roving tabindex, arrow/Home/End), `client/src/utils/breakdown.js` (`realFlows`, `sumAmounts`, `combinedBreakdown`, `accountBreakdown`). Edited: `DashboardPage.jsx` (one donut pair + one InOutCompareCard; Monthly insights sumIn/sumOut now Combined via shared `realFlows`; daily bars still Spending-only), `CategoryBarList.jsx` (key = `c.key ?? c.category`), `index.css` (mobile `.breakdown-heading-controls > .pill-group {order:0}` so the global header `.pill-group{order:1}` rule doesn't reorder the switch). Per-account transfer segment color `var(--faint)`, labels From/To <other account>. Build passes; lint has 2 PRE-EXISTING `react-hooks/set-state-in-effect` errors (DashboardPage mount `loadAll()` effect, TransactionsPage L42) not from this change. Needs live visual check (desktop + 375px, 3 themes) and CLAUDE.md Dashboard section update.
+- **Resolution:** RESOLVED by engineering-director — QA passed all items; CLAUDE.md updated by technical-writer; live visual check done (one overflow defect found and fixed in follow-up entry senior-frontend-dev-20261021T055536). Pre-existing lint claim independently confirmed by linting HEAD's DashboardPage (same error at L127).
+
+### [technical-writer-20261021T061500] Outcome: CLAUDE.md Dashboard section updated for Breakdown view switch
+- **From:** technical-writer
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Updated the Dashboard bullets in `CLAUDE.md` (scoped edits only, nothing else touched, not committed), verified against `DashboardPage.jsx`, `utils/breakdown.js`, `BreakdownViewSwitch.jsx`. Intro now notes the Spending-only exceptions; added a Monthly insights bullet (Combined money figures via `realFlows`/`sumAmounts`, daily bars Spending-only); replaced the stale `breakdownFor()` Breakdown bullet with the view-switch description (`combinedBreakdown`, `accountBreakdown`, transfer segment `var(--faint)` "From/To <other account>", center labels). Note: skill tool was unavailable to me, so the board format was followed from existing entries.
+- **Resolution:** RESOLVED by engineering-director — CLAUDE.md L111/L116-119 checked against code: function names (`realFlows`, `sumAmounts`, `combinedBreakdown`, `accountBreakdown`), radiogroup/keys, transfer segment and center labels all accurate.
+
+### [qa-engineer-20261021T062500] Outcome: QA of Dashboard Breakdown view switch - PASS (no defects)
+- **From:** qa-engineer
+- **For:** engineering-director, senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Executed real utils/breakdown.js (Node ESM, no browser-only imports) on the worked example: Spending in 215/out 105 (net +110), Savings in 1025/out 220 (net +805), Combined in 1015 (income 1000, other 15, no suffix) / out 100 (food (Spending) 80, food (Savings) 20), sumIn/sumOut 1015/100, net 915, rate 90%. All match spec. Edge cases OK: empty (all 0, rate 0), transfers-only (Combined empty; per-account only gray From/To segments, nets +175/-175), case-insensitive collision (Food/food suffixed), keys unique. Diff review: Monthly insights uses shared realFlows on breakdownTransactions; daily bars still Spending-only (breakdownRealOut); no other Dashboard sections touched. Switch keyboard handling correct (wraparound, focus follows, roving tabIndex). Build passes; lint = only the 2 known pre-existing errors (DashboardPage:119, TransactionsPage:42). Not covered: live visual/a11y check (needs director).
+- **Resolution:** RESOLVED by engineering-director — live numbers in the running app matched QA's script output exactly; keyboard handling confirmed at runtime; visual pass done. QA's negative-savings-rate note is pre-existing formula behaviour, out of scope, surfaced in director report.
+
+### [senior-frontend-dev-20261021T055536] Outcome: Breakdown heading controls overflow at 769-~900px fixed
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Moved the wrap treatment into the base `.breakdown-heading-controls` rule in `client/src/index.css`: added `flex-wrap: wrap; row-gap: 12px; max-width: 100%;` (column gap stays 40px). Removed the now-redundant `flex-wrap: wrap` from the <=768px override (it keeps `gap:12px; width:100%`). Global 768px breakpoint untouched. Row wraps only when the ~770px intrinsic width doesn't fit, so >=~900px stays one row; row-gap 12 equals the verified mobile gap, matching the existing reservation for MonthSwitcher's activity line. Updated the DashboardPage heading-row comment. Build passes; lint shows only the 2 known pre-existing errors. Needs live re-measure at 769/800/860/900/1000/1366/375.
+- **Resolution:** RESOLVED by engineering-director — re-measured live: scrollWidth == viewport and controls within container at 375/600/768/769/800/860/900/1000/1100/1366; 769-860 wraps Show to a 2nd row with no collision against "Earliest:" line (screenshot @800); >=900 single row.
+
+<!-- ARCH-0018:END -->
