@@ -4,12 +4,14 @@ import { currentMonthStr, monthLabel } from '../utils/dateUtils.js'
 import { formatCurrency } from '../utils/format.js'
 import { ACCOUNTS } from '../constants/categories.js'
 import { useCategories } from '../contexts/categories.js'
+import { useCategoryColor } from '../hooks/useCategoryColor.js'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 import CategoryManagerModal from '../components/transactions/CategoryManagerModal.jsx'
-import { fillColorFor, suffixFor, classifyBudgetHealth } from '../utils/budgetHealth.js'
+import { suffixFor, classifyBudgetHealth } from '../utils/budgetHealth.js'
 
 export default function BudgetPage() {
-  const { outgoingFor, colorFor } = useCategories()
+  const { outgoingFor } = useCategories()
+  const colorFor = useCategoryColor()
   const outgoing = outgoingFor(ACCOUNTS.SPENDING)
   const [month, setMonth] = useState(currentMonthStr())
   const [summary, setSummary] = useState(null)
@@ -84,7 +86,7 @@ export default function BudgetPage() {
   const rows = outgoing.map(({ name: category }) => {
     const actual = actualsMap[category] || 0
     const budget = budgetsByCategory[category] ?? 0
-    return { category, actual, budget, health: classifyBudgetHealth(actual, budget), color: colorFor(ACCOUNTS.SPENDING, category) }
+    return { category, actual, budget, health: classifyBudgetHealth(actual, budget), color: colorFor(ACCOUNTS.SPENDING, category, 'out') }
   })
 
   const totalBudgeted = rows.reduce((sum, r) => sum + r.budget, 0)
@@ -114,14 +116,14 @@ export default function BudgetPage() {
   }
 
   return (
-    <div className="page-animate">
+    <div className="page-animate bg">
       <div className="page-header-row">
         <div>
           <div className="page-eyebrow">{monthLabel(month)}</div>
           <h1 className="page-title">Budget</h1>
         </div>
         <div className="page-header-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => setCatManagerOpen(true)}>Manage categories</button>
+          <button type="button" className="btn btn-secondary bg-btn-plain" onClick={() => setCatManagerOpen(true)}>Manage categories</button>
           <MonthSwitcher month={month} onChange={setMonth} />
         </div>
       </div>
@@ -136,10 +138,13 @@ export default function BudgetPage() {
       <div className="card">
         <div className="card-row">
           <h2>Category budgets</h2>
-          <span style={{ color: 'var(--muted)' }}>Total budgeted {formatCurrency(totalBudgeted)}</span>
+          <span className="bg-total">
+            <span className="bg-total-lbl">Total budgeted</span>{' '}
+            <span className="bg-total-box">{formatCurrency(totalBudgeted)}</span>
+          </span>
         </div>
 
-        <div className="budget-actions-row" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <div className="budget-actions-row">
           <button
             type="button"
             className="btn btn-secondary"
@@ -162,7 +167,7 @@ export default function BudgetPage() {
 
           {confirmClearOpen && (
             <>
-              <span style={{ color: 'var(--muted)' }}>Clear all budgets for {monthLabel(month)}?</span>
+              <span className="bg-confirm-text">Clear all budgets for {monthLabel(month)}?</span>
               <button
                 type="button"
                 className="btn btn-danger"
@@ -185,6 +190,7 @@ export default function BudgetPage() {
 
         {actionError && <span className="error-text" role="alert">{actionError}</span>}
 
+        <div className="bg-rows">
         {rows.map((row) => {
           const draftValue = drafts[row.category]
           const inputValue = draftValue !== undefined ? draftValue : String(row.budget)
@@ -194,60 +200,63 @@ export default function BudgetPage() {
           const inputId = `budget-input-${row.category}`
 
           const headValueText = `${formatCurrency(row.actual)} of ${formatCurrency(row.budget)}`
+          // Same width rule the bar always used; the pill shows the same number.
+          const pct = row.budget > 0 ? Math.round((row.actual / row.budget) * 100) : (row.actual > 0 ? 100 : 0)
 
           return (
             <div className="budget-row" key={row.category}>
               <div className="budget-row-head">
-                <span className="cat-bar-row-label">
-                  <span className="cat-bar-row-swatch" style={{ background: row.color }} />
+                <span className="bg-chip" style={{ background: row.color }}>
                   {row.category}
                 </span>
                 <span
-                  className="cat-bar-row-value"
+                  className="bg-value"
                   style={{ color: row.health === 'over' ? 'var(--red)' : 'var(--muted)' }}
                 >
                   {headValueText}
                   {suffix && <span style={{ color: suffix.color }}>{suffix.text}</span>}
+                  <span className={`bg-pct bg-pct--${row.health}`}>{pct}%</span>
                 </span>
               </div>
 
-              <div className="budget-row-bars">
-                <div className="cat-bar-track">
-                  <div
-                    className="cat-bar-fill"
-                    style={{
-                      width: `${row.budget > 0 ? Math.min(100, Math.round((row.actual / row.budget) * 100)) : (row.actual > 0 ? 100 : 0)}%`,
-                      background: fillColorFor(row.health),
-                    }}
+              <div className="bg-controls">
+                <div className="bg-track">
+                  <i
+                    className={`bg-fill bg-fill--${row.health}${pct === 0 ? ' bg-fill--zero' : ''}`}
+                    style={{ width: `${Math.min(100, pct)}%` }}
                   />
                 </div>
-              </div>
 
-              <div className="budget-row-input">
-                <label className="visually-hidden" htmlFor={inputId}>Budget for {row.category}</label>
-                <input
-                  id={inputId}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={inputValue}
-                  disabled={isSaving}
-                  style={{ opacity: isSaving ? 0.6 : 1 }}
-                  onChange={(e) => setDrafts((prev) => ({ ...prev, [row.category]: e.target.value }))}
-                  onBlur={(e) => commitBudget(row.category, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      commitBudget(row.category, e.target.value)
-                    }
-                  }}
-                />
+                <div className="budget-row-input">
+                  <label className="visually-hidden" htmlFor={inputId}>Budget for {row.category}</label>
+                  <div className="bg-money">
+                    <span className="bg-money-sign" aria-hidden="true">$</span>
+                    <input
+                      id={inputId}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={inputValue}
+                      disabled={isSaving}
+                      style={{ opacity: isSaving ? 0.6 : 1 }}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [row.category]: e.target.value }))}
+                      onBlur={(e) => commitBudget(row.category, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          commitBudget(row.category, e.target.value)
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
               {rowError && <span className="error-text" role="alert">{rowError}</span>}
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )

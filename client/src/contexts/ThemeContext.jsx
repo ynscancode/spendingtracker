@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { THEMES, STORAGE_KEY, DEFAULT_THEME, ThemeContext } from './theme.js'
+import { THEMES, THEME_COLOR_SCHEME, STORAGE_KEY, DEFAULT_THEME, ThemeContext } from './theme.js'
 
 function readStoredTheme() {
   try {
@@ -29,8 +29,9 @@ export function ThemeProvider({ children }) {
     style.color = 'var(--text)'
     style.minHeight = '100vh'
     style.fontFamily = 'var(--font-ui)'
+    style.colorScheme = THEME_COLOR_SCHEME[theme] || THEME_COLOR_SCHEME[DEFAULT_THEME]
     return style
-  }, [tokens])
+  }, [tokens, theme])
 
   const value = useMemo(() => ({ theme, setTheme, tokens }), [theme, tokens])
 

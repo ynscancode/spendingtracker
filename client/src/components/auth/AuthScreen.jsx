@@ -5,8 +5,9 @@ import { LoginForm, SignupForm } from './AuthForms.jsx'
 // Rendered by App.jsx in place of the whole app when there's no active
 // session (contract G). Not a modal/overlay — no portal, it IS the page —
 // so it reuses `.modal-tabs`/`.pill-btn`/`.form-field`/`.error-text`/`.btn`
-// tokens from index.css for visual consistency without inventing new ones,
-// inside its own `.auth-screen`/`.auth-card` layout wrapper.
+// tokens from index.css, inside its own split-screen `.auth-screen` layout:
+// `.auth-l` (lime brand panel) + `.auth-r` (form card). The tiles are
+// decorative (aria-hidden); the tagline is the same copy as before.
 export default function AuthScreen() {
   const { login, signup, guest } = useAuth()
   const [mode, setMode] = useState('login')
@@ -27,12 +28,30 @@ export default function AuthScreen() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-card">
+      <div className="auth-l">
         <div className="auth-brand">
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">Ledger</span>
         </div>
+        <div className="auth-tiles" aria-hidden="true">
+          <div className="auth-tile auth-tile--spent">
+            <div className="auth-tile-lbl">Spent today</div>
+            <div className="auth-tile-big">$18.40</div>
+          </div>
+          <div className="auth-tile auth-tile--txn">
+            <span className="auth-tile-badge">F</span>
+            <div>
+              <div className="auth-tile-name">Chicken rice</div>
+              <div className="auth-tile-amt">&minus;$5.80</div>
+            </div>
+          </div>
+          <div className="auth-tile auth-tile--pill">Under budget today</div>
+        </div>
         <p className="auth-tagline">Track spending and savings, privately, in one place.</p>
+      </div>
+
+      <div className="auth-r">
+      <div className="auth-card">
 
         <div className="modal-tabs auth-tabs">
           <button
@@ -76,6 +95,7 @@ export default function AuthScreen() {
           later or from another device.
         </p>
         {guestError && <span className="error-text" role="alert">{guestError}</span>}
+      </div>
       </div>
     </div>
   )

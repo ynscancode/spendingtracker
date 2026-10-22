@@ -27,7 +27,9 @@ npm run lint      # eslint .
 npm run preview   # serve production build locally
 ```
 
-The SQLite DB (`server/budget.db`) is gitignored, created automatically via migrations on first run. Delete it to reset. `server/.env.example` documents all vars. Required: `JWT_SECRET` (throws at module load if unset, crashing the server), `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN`, `API_TOKEN`, `CORS_ORIGIN`. Optional LLM: `OLLAMA_CLOUD_*`.
+The SQLite DB (`server/budget.db`) is gitignored, created automatically via migrations on first run. Delete it to reset. `server/.env.example` documents all vars. Required: `JWT_SECRET` (throws at module load if unset, crashing the server), `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN`, `API_TOKEN`, `CORS_ORIGIN`. (`OLLAMA_CLOUD_*` in `.env.example` are leftovers from the removed import feature; unused.)
+
+**Local preview without touching production**: `server/.env.local` and `client/.env.local` are Vercel-pulled **production** values (prod Turso DB, prod API URL) — never use them for local testing. The server only loads `.env`. Run the server with `TURSO_DATABASE_URL=file:<path>/preview.db` + a dummy `JWT_SECRET`, and the client with `VITE_API_URL= VITE_API_TOKEN=` set empty in the shell (Vite would otherwise read the prod URL from `client/.env.local`; shell env wins over `.env*` files), so `/api` goes through the Vite proxy to `:4000`.
 
 ## Architecture
 
@@ -51,7 +53,7 @@ Migrations: `server/src/migrations/001_init.sql`–`009_budgets_userid.sql`. `db
 
 ### Backend structure (`server/src`)
 
-`index.js` mounts route groups under `/api`: `accounts`, `transactions` (+ `/transfer`), `summary` (`/daily`, `/monthly`), `budgets`, `categories`, `imports`, `auth`.
+`index.js` mounts route groups under `/api`: `accounts`, `transactions` (+ `/transfer`), `summary` (`/daily`, `/monthly`), `budgets`, `categories`, `auth`. (The CSV/XLSX import wizard and its LLM-suggest endpoint were removed in favour of Export.)
 
 **Auth gates** (checked in order):
 1. Static `X-API-Token: <API_TOKEN>` header gate — infra-level; skipped if `API_TOKEN` unset. `OPTIONS` always passes.
@@ -76,8 +78,6 @@ Migrations: `server/src/migrations/001_init.sql`–`009_budgets_userid.sql`. `db
 - `POST /api/budgets/copy-from-recent` `{ month }` → copies from most recent prior month
 - `POST /api/budgets/clear` `{ month }` → deletes all rows for that month
 
-**Import LLM-suggest** (`routes/imports.js` → `importLlmService.js`): `POST /api/imports/suggest`. Assist-only, never auto-commits. Hard-off if `OLLAMA_CLOUD_*` unset or base URL not `https:`. Server-enforces: 5-row cap, comment-column redaction, `REQUEST_TIMEOUT_MS` abort, `MAX_RESPONSE_BYTES` cap. Validates response with drop-whole-on-any-deviation strict allow-list. In-memory cache by `fileHash`. Returns 200 `{ suggestion: null }` for all expected failures.
-
 ### Frontend structure (`client/src`)
 
 Three pages under `App.jsx` (react-router-dom): `DashboardPage`, `TransactionsPage`, `BudgetPage`. All server I/O through `api/client.js`.
@@ -92,27 +92,35 @@ Three pages under `App.jsx` (react-router-dom): `DashboardPage`, `TransactionsPa
 - `CategoriesProvider` and `TransactionActivityProvider` are `key={user.id}` — remounts on account switch.
 
 **Auth UI** (`components/auth/`):
-- `AuthScreen.jsx` — full-page login/signup tabs + guest button
+- `AuthScreen.jsx` — split screen: lime panel (wordmark, decorative tilted tiles, tagline; hidden/shrunk on phones) + card with Log in/Sign up segmented tabs, fields, tomato submit, "or", sky "Use as guest"
 - `AuthForms.jsx` — shared `LoginForm`/`SignupForm`; LoginForm has "Stay signed in" checkbox (default checked)
 - `AddAccountModal.jsx` — add second account; portal to `#modal-root`
 - `DeleteAccountModal.jsx` — password confirmation (skipped for guests); uses `.btn-danger` + `.clear-history-warning` styles
-- `AccountSwitcher.jsx` — Header dropdown: current username, switch/add/logout/delete; mobile: `order: 1/2` reorder, `calc(100vw - 32px)` width clamp
+- `AccountSwitcher.jsx` — sky account pill (black "guest" tag for guests) → `role="menu"` dropdown with switch/add/logout/delete; ≤760px a round button → bottom-sheet dialog (see Header / navigation)
 
 **`api/client.js`**: `authHeader()` attaches `X-API-Token` + `Authorization: Bearer` to every request. Export download uses `?token=&authToken=` query params. `setAuthToken(token, { persist })`, `getAuthToken()`, `clearAuthToken()`.
 
 **Transactions list** (`components/transactions/`): Flat array grouped client-side (year → month → day) via `groupByYearMonthDay`. Most-recent-first for years/months/days; within a day keeps original chronological order. `DayGroup` computes per-day totals and end-of-day balances (`dayTotals.js`); shows per-account breakdown only when a day spans multiple accounts.
 
-- **Highlight** (`highlight.js`): transfers → `'highlight-transfer'` (no direction coloring). Non-transfer out: `'highlight-orange'` (>$20) / `'highlight-red'` (>$40) as a small colored dot. `transferBadgeFor` → IN/OUT text badge (green/red) in the comment cell.
+- **Highlight** (`highlight.js`): transfers → `'highlight-transfer'` (no direction coloring). Non-transfer out: `'highlight-orange'` (>$20) / `'highlight-red'` (>$40) as a small spend-signal dot (yellow / tomato). `transferBadgeFor` → IN/OUT text badge (green/red) in the comment cell.
 - **Currency**: `formatCurrency` parenthesizes negatives. `formatInflow`/`formatOutflow` for non-negative flows. `AccountingValue` splits trailing `)` into a right-edge gutter span so digits align. `BalanceValue` wraps `AccountingValue` for `formatCurrency`.
 - **Inline edit**: `TransactionRow` shows `ReadRow` or `EditRow` based on `editingId`. `editingId` held in `TransactionsPage`, threaded down. For transfers, Category is locked (plain text); save omits `category`. Enter saves, Escape cancels. Errors render as `role="alert"` row beneath editing row.
+- **Layout**: one table (`.tr` grid rows with explicit ARIA table roles) — yellow day chips, day totals, per-account sub-totals, diagonal hatch on transfer rows, sky edit row. Desktop table has a ~1042px min-width (scrolls inside its card between 761–1042px, accepted). **≤760px** the same markup renders as one card per day; tapping a row toggles Edit/Delete via a local `open` state in `ReadRow` (`aria-expanded`), and edit opens inline in the card through the same `editingId` flow.
 
-**Modal portal**: `TransactionModal` (and nested `CategoryManagerModal`) portal to `<div id="modal-root" />`, a sibling of `<main>` inside `.app-root`. Required because `.page-animate` has a CSS `transform` which makes it a containing block for `position: fixed`. Any new full-page modal must use `#modal-root`.
+**Transaction modal**: Direction, Account and Category use `RadioChoice` (`components/transactions/RadioChoice.jsx` — `role="radiogroup"`, `aria-checked`, roving tabindex, arrow/Home/End) instead of `<select>`s; same setters, same values, byte-identical request bodies (verified). Category is a tap-to-pick chip row. Amount field comes first and is tinted tomato (out) / lime (in).
+
+**Modal portal**: `TransactionModal` (and nested `CategoryManagerModal`), the phone account sheet and `AddFab` portal to `<div id="modal-root" />` (`utils/modalRoot.js`), a sibling of `<main>` inside `.app-root`. Required because `.page-animate` has a CSS `transform` which makes it a containing block for `position: fixed`. Any new full-page modal or fixed-position control rendered from inside a page must use `#modal-root`. ≤760px, modals render as bottom sheets (26px top radius, grab handle, max-height 92%).
+
+**Header / navigation** (`components/layout/`): `Header.jsx` is one sticky bordered bar — wordmark, desktop `<nav aria-label="Primary">` pills (active = `--inv`), `StyleSwitcher` (shared Dark/Light/Mono control), `AccountSwitcher`. Between ~761–1000px the header wraps to two rows (accepted). **≤760px**: header collapses to wordmark + round sky account button; nav moves to a fixed bottom tab bar (`<nav aria-label="Primary tabs">`, safe-area aware, page gets bottom padding); `AccountSwitcher` opens a bottom-sheet dialog (focus trap, Escape/scrim/Close return focus) holding the style switcher and account actions instead of the desktop `role="menu"` dropdown. Current account is shown as a disabled sky row with a checkmark.
+
+**Add FAB** (`components/layout/AddFab.jsx`): round tomato "+" shown only ≤760px. The add-transaction modal's open state is page-local, so the FAB is rendered **inside** `DashboardPage` and `TransactionsPage` (calling each page's existing open handler) and portaled to `#modal-root` — no shared state. Budget has no FAB (no add flow there). Page-level add buttons carry `.page-add-btn` and are hidden ≤760px.
 
 **Dashboard** (`DashboardPage.jsx`): Spending-only (`scopeAccountId` = fixed constant), except Monthly insights money figures and the Breakdown section (both accounts). Contains:
 - Daily insights card — "Budget $X/day" pill is click-to-edit, backed by `hooks/useDailyBudget.js` (localStorage `ledger.dailyBudget`, `null` stored as `'null'` to survive reload)
 - Budget card — total budgeted vs. actual, full worst-first category list (over → near → under), no row cap
-- Balance cards — Spending + Net worth
-- Top spending + Recent activity (Spending-only)
+- Stat tiles — Spent today (lime, with a meter vs. the daily budget, only when one is set), Daily average (sky), Busiest day, Projected month
+- Balance cards — Spending + Net worth (Net worth inverted)
+- Top spending + Recent activity (Spending-only). Top spending rows: name + amount on a head row **above** a separate 16px track bar (text must not sit on the fill). Recent activity rows use a round initial badge in the category colour.
 - Monthly insights — money in/out/net/savings rate are Combined (both accounts, transfers excluded, `selectedMonth`) via shared `realFlows`/`sumAmounts` in `utils/breakdown.js`; the daily spending bar chart stays Spending-only.
 - Breakdown section — heading row has `BreakdownViewSwitch` (Combined | Spending | Savings, default Combined; `role="radiogroup"`, arrow/Home/End keys) + `MonthSwitcher` + cash/percentage toggle; independent `selectedMonth` state and `breakdownTransactions` fetch. One `DonutCard` pair + one `InOutCompareCard` driven by the selected view. Derived client-side by `utils/breakdown.js`:
   - Combined (`combinedBreakdown`): both accounts as one pot, transfers excluded; grouped by (account, category), account-name suffix only when a category name collides across accounts; donut center Spent/Earned.
@@ -122,15 +130,25 @@ Three pages under `App.jsx` (react-router-dom): `DashboardPage`, `TransactionsPa
 
 **Categories**: Fetched live via `CategoriesContext` (`contexts/CategoriesContext.jsx`). Exposes `outgoingFor(accountId)`, `incomingFor(accountId)`, `colorFor(accountId, name)`. Components use `ACCOUNTS.SPENDING`/`ACCOUNTS.SAVINGS` (not a static list).
 
-**Category colors**: 10 seed colors at 36° hue intervals (sat 48%, light 58%). `travel` and system transfer categories share neutral gray `#8A8F98`. `assignColor()` in `categoryService.js` finds a hue ≥30° from all existing colors on that account for new categories.
-
-**LLM import suggest** (`components/imports/ImportSuggestAI.jsx`, Step 2 of import wizard): "Suggest with AI" button opens consent panel showing exact payload before sending. `buildPayload()` is shared between preview and real request. Applies to `columnMapping`/`categoryMapping`/`accountMapping` state only; never auto-commits. Failed/null response → silent no-op + `role="status"` note.
+**Category colors (display)**: Components get colours from `hooks/useCategoryColor.js` → `utils/categoryColor.js`, **not** the server-stored `color` column. Rule: every non-system category of the user (both accounts, both directions) goes into one list ordered by server `id` (creation order); position 0–9 → `var(--p0…p9)`, ≥10 → generated pastels (golden-angle hues, kept clear of lime/yellow/tomato, ≥4.5:1 with `#121212` text). Mono uses a distinct grey per category (only ~6–8 are easy to tell apart). Result: **every category colour is unique per user**, adding a category never recolours others, but **deleting one shifts later categories' colours**. Misses fall back to `colorFor()`, then neutral grey — never `undefined`. Transfers are not categories here: dashed chip on `--card` / neutral `TRANSFER_COLOR` segment. Server-side `assignColor()` in `categoryService.js` still writes the stored `color` column (hue ≥30° from existing) but the UI no longer displays it.
 
 **Month navigation** (`components/layout/MonthSwitcher.jsx`): shared across BudgetPage, DashboardPage Breakdown, and TransactionsPage (if applicable). Props: `{ month, onChange }` where `onChange` receives `'YYYY-MM'`.
 
 ### Styling
 
-`client/src/index.css` — single global stylesheet, CSS custom properties in `:root`. Warm dark theme, terracotta accent `--accent`. Tokens: `--money-in`, `--money-out`, `--topup`, `--transfer-out`, `--warning` (decorative fills), `--warning-text` (near-budget text — differs from `--warning` on light theme for WCAG AA). Three themes in `contexts/theme.js`: refined/dark, editorial/light, terminal/mono.
+"Colour Block" design — source of truth is `design/DESIGN-HANDOFF.md` + `design/ledger-prototype.html` (open in a browser). `client/src/index.css` is the single global stylesheet.
+
+**Themes** (`contexts/theme.js`): keys `refined` / `editorial` / `terminal` (labels Dark / Light / Mono; `localStorage['ledger-theme']`) carry the handoff's dark / light / mono token sets. **Do not rename the keys** — it would orphan saved preferences. `ThemeProvider` applies the token object as **inline style on `.app-root`** (plus `colorScheme`), not on `<html>`.
+- Core tokens: `--bg --card --ink --line --shadow --muted --soft --rule`, fills `--lime --sky --tomato --pink --yellow`, `--pos --neg`, `--inv/--oninv` (active nav, Net worth, inverse surfaces), `--onc`, `--scrim`, `--focus` (sky on Dark, ink on Light/Mono — sky fails contrast on white), category palette `--p0…--p9` (never lime/yellow/tomato — reserved for budget health), `--font` (Bricolage Grotesque, loaded in `client/index.html`).
+- **Legacy names are aliases**, defined in the same theme objects: `--text→ink`, `--green/--money-in→pos`, `--red/--money-out→neg`, `--accent→tomato`, `--faint→muted` (not `--card`: it's used as text and as the transfer donut segment), `--surface→card`, `--surface-2→soft`, `--border→line`, `--border-strong→rule`, `--topup/--transfer-out→pink`, `--warning→yellow`, `--warning-text` (yellow on Dark, ink on Light/Mono), `--font-ui/--font-num/--font-display→--font`, `--radius 18px`, `--radius-sm 12px`.
+- **Gotcha**: a custom property whose value is `var(--x)` resolves on the element that declares it. Aliases declared on `:root` while tokens live on `.app-root` resolve to nothing (this silently broke `--money-in` before the re-skin). Keep every alias inside the theme objects.
+- `--shadow` is a **colour**, not a box-shadow — write `box-shadow: 4px 4px 0 var(--shadow)` (cards) / `3px 3px 0` (buttons).
+
+**Colour meaning**: lime = under budget / money in / selected segment; yellow = near budget / day headers / orange spend signal; tomato = over budget / money out / primary CTA / red spend signal; sky = secondary buttons, account button; `--inv` = active nav, table header, Net worth. Tomato and the other fills are **fills only** — text on any coloured fill is always `#121212`; never use tomato as text (fails AA on white).
+
+**Shape**: 2px solid `var(--line)` borders; radius cards 18px (16px phones), inputs 12px, pills/buttons/chips 999px, modals 22px; hard offset shadows only (no blur, no gradients). Buttons: `.btn` tomato, `.btn-secondary` sky, `.btn-ghost` card/no shadow, `.btn-danger` dashed `--neg` text, `.modal-panel .btn-danger` black destructive confirm; hover translate(-1px,-1px), active translate(2px,2px). Segmented controls (`.pill-group`/`.modal-tabs` + `.pill-btn`, also `[aria-pressed]`/`[aria-checked]`): selected = lime fill **plus inset ink ring** (lime/grey alone is ~1.3:1 on white). Placeholders use `--muted`. Numbers: `font-variant-numeric: tabular-nums` wherever `--font-num` is used (Bricolage is proportional by default). Breakpoint for the phone layout is **760px**.
+
+**Contrast**: a scripted WCAG AA audit (all pages + modals × 3 styles × 1280/390) passed with 0 failures at the re-skin. Re-check contrast when adding text on a coloured fill.
 
 Buttons/inputs/selects need `font-family: inherit` (already in `index.css`).
 
@@ -153,4 +171,3 @@ Placed at end of file so it isn't overridden by later equal-specificity rules.
 - **Password floor**: fixed — `signup` rejects <8 chars or >72 bytes.
 - **No DB-level FK for `user_id`**: permanent design (SQLite ALTER TABLE limitation). Isolation is 100% service-layer. Any new query omitting `user_id` on transactions/budgets/categories is a regression.
 - **Open CORS if `CORS_ORIGIN` unset**: infra/deploy-checklist item. Set `CORS_ORIGIN` to deployed frontend origin in production.
-- **LLM suggest data egress**: only path data leaves the machine. Opt-in per file with mandatory consent/preview. Server-enforced 5-row cap, comment redaction, schema-validation drop-whole. Accepted under current single-user model. Reopens if multi-user, auto-commit, or always-on default is added.

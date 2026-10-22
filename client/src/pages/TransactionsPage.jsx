@@ -7,6 +7,7 @@ import ExportModal from '../components/transactions/ExportModal.jsx'
 import ClearHistoryModal from '../components/transactions/ClearHistoryModal.jsx'
 import CategoryManagerModal from '../components/transactions/CategoryManagerModal.jsx'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
+import AddFab from '../components/layout/AddFab.jsx'
 import { currentMonthStr, monthRangeFor, monthLabel } from '../utils/dateUtils.js'
 import { formatCurrency } from '../utils/format.js'
 import { ACCOUNTS, ACCOUNT_NAMES } from '../constants/categories.js'
@@ -96,17 +97,18 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="page-animate">
+    <div className="page-animate tx">
       <div className="page-header-row">
         <div>
           <div className="page-eyebrow">{monthLabel(month)}</div>
           <h1 className="page-title">Transactions</h1>
         </div>
         <div className="page-header-actions">
-          <button type="button" className="btn" onClick={() => openModal('normal')}>+ Transaction</button>
+          <button type="button" className="btn page-add-btn" onClick={() => openModal('normal')}>+ Transaction</button>
+          <AddFab onClick={() => openModal('normal')} />
           <button type="button" className="btn btn-secondary" onClick={() => openModal('transfer')}>⇄ Transfer</button>
-          <button type="button" className="btn btn-secondary" onClick={() => setExportOpen(true)}>Export</button>
-          <button type="button" className="btn btn-secondary" onClick={() => setCatManagerOpen(true)}>Manage categories</button>
+          <button type="button" className="btn btn-secondary tx-btn-plain" onClick={() => setExportOpen(true)}>Export</button>
+          <button type="button" className="btn btn-secondary tx-btn-plain" onClick={() => setCatManagerOpen(true)}>Manage categories</button>
           <span className="page-header-actions-divider" aria-hidden="true" />
           <button type="button" className="btn-danger" onClick={() => setClearOpen(true)}>Clear all history</button>
         </div>
@@ -141,15 +143,26 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      <ThresholdLegend />
+      <div className="tx-signals-row">
+        <div className="tx-signals">
+          <ThresholdLegend />
+        </div>
 
-      <div className="account-summary-strip">
-        {accounts.map((account) => (
-          <div className="account-summary-item" key={account.id}>
-            <span className="account-summary-label">{account.name} balance</span>
-            <span className="account-summary-value">{formatCurrency(account.balance)}</span>
-          </div>
-        ))}
+        <div className="account-summary-strip">
+          {accounts.map((account) => (
+            <div className="account-summary-item" key={account.id}>
+              <span className="account-summary-label">
+                <span
+                  className="tx-acct-dot"
+                  style={{ background: account.id === ACCOUNTS.SAVINGS ? 'var(--pink)' : 'var(--sky)' }}
+                  aria-hidden="true"
+                />
+                {account.name} balance
+              </span>
+              <span className="account-summary-value">{formatCurrency(account.balance)}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {loading ? (

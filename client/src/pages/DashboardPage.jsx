@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Pencil } from 'lucide-react'
 import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
 import { formatCurrency, formatSigned, formatOutflow } from '../utils/format.js'
@@ -6,8 +7,10 @@ import { computeDailyInsights } from '../utils/insights.js'
 import { ACCOUNTS } from '../constants/categories.js'
 import { useDailyBudget } from '../hooks/useDailyBudget.js'
 import { useCategories } from '../contexts/categories.js'
+import { useCategoryColor } from '../hooks/useCategoryColor.js'
 import { useTransactionActivity } from '../contexts/transactionActivity.js'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
+import AddFab from '../components/layout/AddFab.jsx'
 import TransactionModal from '../components/transactions/TransactionModal.jsx'
 import DonutChart from '../components/breakdown/DonutChart.jsx'
 import { buildDonutSegments } from '../utils/donutMath.js'
@@ -15,12 +18,15 @@ import CategoryBarList from '../components/breakdown/CategoryBarList.jsx'
 import BreakdownControls from '../components/breakdown/BreakdownControls.jsx'
 import BreakdownViewSwitch from '../components/breakdown/BreakdownViewSwitch.jsx'
 import { realFlows, sumAmounts, combinedBreakdown, accountBreakdown } from '../utils/breakdown.js'
-import { fillColorFor, suffixFor, classifyBudgetHealth } from '../utils/budgetHealth.js'
+import { suffixFor, classifyBudgetHealth } from '../utils/budgetHealth.js'
 
 function daysInMonth(monthStr) {
   const [year, month] = monthStr.split('-').map(Number)
   return new Date(year, month, 0).getDate()
 }
+
+// Budget health -> Colour Block tone (lime = under, yellow = near, tomato = over).
+const HEALTH_TONE = { under: 'lime', near: 'yellow', over: 'tomato' }
 
 // Simple two-bar money-in vs money-out comparison for the selected view, scaled
 // relative to whichever of the two totals is larger. Bars are vertical to
@@ -30,27 +36,27 @@ function InOutCompareCard({ totalIn, totalOut }) {
   const max = Math.max(totalIn, totalOut)
   const heightFor = (value) => (max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 4)
   return (
-    <div className="card" style={{ marginBottom: 0 }}>
-      <h2 style={{ margin: '0 0 18px', font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>In vs. out</h2>
+    <div className="card">
+      <h2>In vs. out</h2>
       <div className="inout-compare">
         <div className="inout-compare-bar-col">
           <div className="inout-compare-track">
             <div
               className="inout-compare-fill"
-              style={{ height: `${heightFor(totalOut)}%`, background: 'var(--red)' }}
+              style={{ height: `${heightFor(totalOut)}%`, background: 'var(--tomato)' }}
             />
           </div>
-          <div className="inout-compare-value" style={{ color: 'var(--red)' }}>{formatCurrency(totalOut)}</div>
+          <div className="inout-compare-value">{formatCurrency(totalOut)}</div>
           <div className="inout-compare-label">Money out</div>
         </div>
         <div className="inout-compare-bar-col">
           <div className="inout-compare-track">
             <div
               className="inout-compare-fill"
-              style={{ height: `${heightFor(totalIn)}%`, background: 'var(--green)' }}
+              style={{ height: `${heightFor(totalIn)}%`, background: 'var(--lime)' }}
             />
           </div>
-          <div className="inout-compare-value" style={{ color: 'var(--green)' }}>{formatCurrency(totalIn)}</div>
+          <div className="inout-compare-value">{formatCurrency(totalIn)}</div>
           <div className="inout-compare-label">Money in</div>
         </div>
       </div>
@@ -62,9 +68,9 @@ function DonutCard({ icon, iconColor, label, centerLabel, cats, mode }) {
   const total = cats.reduce((s, c) => s + c.value, 0)
   const donut = buildDonutSegments(cats, total)
   return (
-    <div className="card" style={{ marginBottom: 0 }}>
+    <div className="card">
       <div className="donut-card-head">
-        <h2><span style={{ color: iconColor }}>{icon}</span> {label}</h2>
+        <h2><span className="ov-chip ov-chip--fill ov-chip--icon" style={{ background: iconColor }}>{icon}</span> {label}</h2>
         <span className="donut-card-total">{formatCurrency(total)}</span>
       </div>
       <div className="donut-layout">
@@ -76,7 +82,8 @@ function DonutCard({ icon, iconColor, label, centerLabel, cats, mode }) {
 }
 
 export default function DashboardPage() {
-  const { outgoingFor, colorFor } = useCategories()
+  const { outgoingFor } = useCategories()
+  const colorFor = useCategoryColor()
   const activity = useTransactionActivity()
   const [accounts, setAccounts] = useState([])
   const [monthTransactions, setMonthTransactions] = useState([])
@@ -215,40 +222,46 @@ export default function DashboardPage() {
   const insights = computeDailyInsights(scopedTransactions, { todayDate: today, dailyBudget })
   const hasDailyBudget = dailyBudget !== null
 
+  // Tile tone follows the Colour Block palette: Spent today = lime, Daily
+  // average = sky, the other two stay on the plain card. Text on a coloured
+  // fill is always dark (--onc), so over/under is carried by the note's
+  // wording rather than a red/green text colour. The Spent today meter reuses
+  // values already on hand (spent today vs the daily budget) and only renders
+  // when a positive daily budget exists.
   const dailyInsightTiles = [
     {
       label: 'Spent today',
+      tone: 'lime',
       value: formatCurrency(insights.spentToday),
-      valueColor: insights.spentTodayOver ? 'var(--red)' : 'var(--text)',
+      meterPct: hasDailyBudget && dailyBudget > 0 ? Math.min(100, (insights.spentToday / dailyBudget) * 100) : null,
       note: hasDailyBudget
         ? `${formatCurrency(insights.spentTodayNoteAmount)} ${insights.spentTodayNote}`
         : '—',
-      noteColor: insights.spentTodayOver ? 'var(--red)' : (hasDailyBudget ? 'var(--green)' : 'var(--muted)'),
     },
     {
       label: 'Daily average',
+      tone: 'sky',
       value: formatCurrency(insights.dailyAverage),
-      valueColor: 'var(--text)',
+      meterPct: null,
       note: hasDailyBudget
         ? `${insights.dailyAveragePct}% ${insights.dailyAverageOver ? 'above target' : 'under target'}`
         : 'No daily budget set',
-      noteColor: hasDailyBudget ? (insights.dailyAverageOver ? 'var(--red)' : 'var(--green)') : 'var(--muted)',
     },
     {
       label: 'Busiest day',
+      tone: null,
       value: formatCurrency(insights.busiestDayAmount),
-      valueColor: 'var(--text)',
+      meterPct: null,
       note: insights.busiestDayLabel,
-      noteColor: 'var(--muted)',
     },
     {
       label: 'Projected month',
+      tone: null,
       value: formatCurrency(insights.projectedMonth),
-      valueColor: 'var(--text)',
+      meterPct: null,
       note: hasDailyBudget
         ? `${insights.daysOnBudget} of ${insights.daysConsidered} days on budget`
         : 'No daily budget set',
-      noteColor: 'var(--muted)',
     },
   ]
 
@@ -267,24 +280,26 @@ export default function DashboardPage() {
     dayMap[d] = (dayMap[d] || 0) + t.amount
     const current = dayBiggestMap[d]
     if (!current || t.amount > current.amount) {
-      dayBiggestMap[d] = { amount: t.amount, category: t.category, color: colorFor(t.account_id, t.category) }
+      dayBiggestMap[d] = { amount: t.amount, category: t.category, color: colorFor(t.account_id, t.category, 'out') }
     }
   })
   const totalDays = daysInMonth(selectedMonth)
   // When no daily budget is set, scale off actual max spend only — no
-  // budget reference line to draw, and no "over" red-coloring since
+  // budget reference line to draw, and no "over" coloring since
   // there's nothing to exceed.
   const maxDay = hasDailyBudget
     ? Math.max(1, dailyBudget, ...Object.values(dayMap))
     : Math.max(1, ...Object.values(dayMap))
   const budgetPct = hasDailyBudget ? (dailyBudget / maxDay) * 100 : null
+  const todayDayNumber = selectedMonth === month ? Number(today.slice(8, 10)) : null
   const dailyBars = Array.from({ length: totalDays }, (_, i) => {
     const v = dayMap[i + 1] || 0
     const h = Math.max(2, Math.round((v / maxDay) * 100))
     const over = hasDailyBudget && v > dailyBudget
-    const bg = v > 0 ? (over ? 'var(--red)' : 'var(--accent)') : 'var(--surface-2)'
-    const opacity = v > 0 ? 0.55 + 0.45 * (v / maxDay) : 1
-    return { height: h, bg, opacity, total: v, biggest: dayBiggestMap[i + 1] || null, day: i + 1 }
+    // Bar tone: over the daily budget = tomato, today (current month only) =
+    // lime, any other spend day = sky, no spend = flat soft stub.
+    const tone = v === 0 ? 'empty' : over ? 'over' : (i + 1 === todayDayNumber ? 'today' : 'default')
+    return { height: h, tone, total: v, biggest: dayBiggestMap[i + 1] || null, day: i + 1 }
   })
 
   // Budget summary is Spending-only — budgeting doesn't apply to Savings.
@@ -318,7 +333,7 @@ export default function DashboardPage() {
   const catTotalsMap = {}
   realOut.forEach((t) => { catTotalsMap[t.category] = (catTotalsMap[t.category] || 0) + t.amount })
   const topCats = Object.entries(catTotalsMap)
-    .map(([category, value]) => ({ category, value, color: colorFor(scopeAccountId, category) }))
+    .map(([category, value]) => ({ category, value, color: colorFor(scopeAccountId, category, 'out') }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 6)
   const maxCat = Math.max(1, ...topCats.map((c) => c.value))
@@ -332,7 +347,8 @@ export default function DashboardPage() {
       const isTransfer = !!t.is_transfer
       return {
         id: t.id,
-        color: isTransfer ? 'var(--faint)' : colorFor(t.account_id, t.category),
+        isTransfer,
+        color: isTransfer ? 'var(--card)' : colorFor(t.account_id, t.category, t.direction),
         comment: isTransfer ? 'Transfer' : t.comment,
         category: isTransfer ? 'Transfer' : t.category,
         meta: dayLabel(t.date),
@@ -348,15 +364,20 @@ export default function DashboardPage() {
   // shown as a neutral segment so in - out equals its net balance change.
   // Scoped to selectedMonth via breakdownTransactions, not the page's
   // current month.
+  // breakdown.js calls colorFor(accountId, name); bind the direction here so
+  // a name present in both an account's outgoing and incoming lists resolves
+  // against the right one.
+  const outColor = (accountId, name) => colorFor(accountId, name, 'out')
+  const inColor = (accountId, name) => colorFor(accountId, name, 'in')
   let viewOut
   let viewIn
   if (breakdownView === 'combined') {
-    viewOut = combinedBreakdown(breakdownTransactions, 'out', colorFor)
-    viewIn = combinedBreakdown(breakdownTransactions, 'in', colorFor)
+    viewOut = combinedBreakdown(breakdownTransactions, 'out', outColor)
+    viewIn = combinedBreakdown(breakdownTransactions, 'in', inColor)
   } else {
     const viewAccountId = breakdownView === 'savings' ? ACCOUNTS.SAVINGS : ACCOUNTS.SPENDING
-    viewOut = accountBreakdown(breakdownTransactions, viewAccountId, 'out', colorFor)
-    viewIn = accountBreakdown(breakdownTransactions, viewAccountId, 'in', colorFor)
+    viewOut = accountBreakdown(breakdownTransactions, viewAccountId, 'out', outColor)
+    viewIn = accountBreakdown(breakdownTransactions, viewAccountId, 'in', inColor)
   }
   const viewTotalOut = viewOut.reduce((s, c) => s + c.value, 0)
   const viewTotalIn = viewIn.reduce((s, c) => s + c.value, 0)
@@ -366,20 +387,24 @@ export default function DashboardPage() {
 
   const monthShortLabel = monthLabel(selectedMonth).split(' ')[0]
 
+  const hasSpendingCategories = outgoingFor(ACCOUNTS.SPENDING).length > 0
+  const budgetPillTone = HEALTH_TONE[classifyBudgetHealth(totalSpentBudgeted, totalBudgeted)]
+
   return (
-    <div className="page-animate">
+    <div className="page-animate ov">
       <div className="page-header-row">
         <div>
           <div className="page-eyebrow">{monthLabel(month)}</div>
           <h1 className="page-title">Overview</h1>
         </div>
         <div className="page-header-actions">
-          <button type="button" className="btn" onClick={() => setModalOpen(true)}>+ Add transaction</button>
+          <button type="button" className="btn page-add-btn" onClick={() => setModalOpen(true)}>+ Add transaction</button>
+          <AddFab onClick={() => setModalOpen(true)} />
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-row">
+      <section className="ov-today">
+        <div className="ov-today-row">
           <h2>{dayLabel(today)}</h2>
           {editingBudget ? (
             <div className="daily-budget-editor">
@@ -422,84 +447,85 @@ export default function DashboardPage() {
               onClick={startEditingBudget}
             >
               {hasDailyBudget ? `Budget ${formatCurrency(dailyBudget)}/day` : 'No daily budget'}
+              <Pencil size={14} strokeWidth={2.5} aria-hidden="true" />
             </button>
           )}
         </div>
-        <div className="card-grid tiles">
+        <div className="ov-stats">
           {dailyInsightTiles.map((tile) => (
-            <div className="stat-tile" key={tile.label}>
-              <div className="stat-tile-label">{tile.label}</div>
-              <div className="stat-tile-value" style={{ color: tile.valueColor }}>{tile.value}</div>
-              <div className="stat-tile-note" style={{ color: tile.noteColor }}>{tile.note}</div>
+            <div className={`ov-stat${tile.tone ? ` ov-stat--${tile.tone}` : ''}`} key={tile.label}>
+              <div className="ov-stat-label">{tile.label}</div>
+              <div className="ov-stat-value">{tile.value}</div>
+              {tile.meterPct !== null && (
+                <div className="ov-meter" aria-hidden="true"><i style={{ width: `${tile.meterPct}%` }} /></div>
+              )}
+              <div className={`ov-stat-note${tile.tone ? '' : ' ov-stat-note--muted'}`}>{tile.note}</div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
       <div className="card">
         <div className="card-row">
           <h2>Budget</h2>
-          {totalBudgeted > 0 && (
-            <span
-              className="pill-tag"
-              style={totalSpentBudgeted > totalBudgeted ? { background: 'color-mix(in oklab, var(--red) 16%, transparent)', color: 'var(--red)' } : undefined}
-            >
-              {budgetUsedPct}% of budget used
-            </span>
-          )}
-        </div>
-        <div className="card-grid tiles">
-          <div className="stat-tile">
-            <div className="stat-tile-label">Total budgeted</div>
-            <div className="stat-tile-value">{formatCurrency(totalBudgeted)}</div>
-            <div className="stat-tile-note" style={{ color: 'var(--muted)' }}>
-              Across {budgetRows.length} categories
-            </div>
+          <div className="ov-legend">
+            {hasSpendingCategories && (
+              <>
+                <span className="ov-chip ov-chip--lime">Under</span>
+                <span className="ov-chip ov-chip--yellow">Near</span>
+                <span className="ov-chip ov-chip--tomato">Over</span>
+              </>
+            )}
+            {totalBudgeted > 0 && (
+              <span className={`ov-chip ov-chip--${budgetPillTone}`}>
+                {budgetUsedPct}% of budget used
+              </span>
+            )}
           </div>
-          <div className="stat-tile">
-            <div className="stat-tile-label">Total spent</div>
-            <div
-              className="stat-tile-value"
-              style={{ color: totalBudgeted > 0 && totalSpentBudgeted > totalBudgeted ? 'var(--red)' : 'var(--text)' }}
-            >
-              {formatCurrency(totalSpentBudgeted)}
+        </div>
+        <div className="ov-sum">
+          <div className="ov-sumbox">
+            <div>
+              <div className="ov-lbl">Total budgeted</div>
+              <div className="ov-big">{formatCurrency(totalBudgeted)}</div>
             </div>
-            <div className="stat-tile-note" style={{ color: totalBudgeted > 0 ? 'var(--muted)' : 'var(--faint)' }}>
-              {totalBudgeted > 0 ? `${budgetUsedPct}% of budget` : 'No budget to compare'}
+            <span className="ov-sub">Across {budgetRows.length} categories</span>
+          </div>
+          <div className="ov-sumbox">
+            <div>
+              <div className="ov-lbl">Total spent</div>
+              <div className="ov-big">{formatCurrency(totalSpentBudgeted)}</div>
             </div>
+            {totalBudgeted > 0
+              ? <span className={`ov-chip ov-chip--${budgetPillTone}`}>{budgetUsedPct}% of budget</span>
+              : <span className="ov-sub">No budget to compare</span>}
           </div>
         </div>
 
-        {outgoingFor(ACCOUNTS.SPENDING).length === 0 ? (
+        {!hasSpendingCategories ? (
           <p className="empty-text" style={{ marginTop: 16 }}>
             No Spending categories to budget yet.
           </p>
         ) : (
-          <div style={{ marginTop: 16 }}>
-            <div className="budget-legend">
-              <span className="budget-legend-item"><span className="cat-bar-row-swatch" style={{ background: 'var(--green)' }} /> Under</span>
-              <span className="budget-legend-item"><span className="cat-bar-row-swatch" style={{ background: 'var(--warning)' }} /> Near</span>
-              <span className="budget-legend-item"><span className="cat-bar-row-swatch" style={{ background: 'var(--red)' }} /> Over</span>
-            </div>
+          <div className="ov-brows">
             {chartRows.map((row) => {
               const suffix = suffixFor(row.health)
               const displayPct = Number.isFinite(row.pct) ? row.pct : 100
               return (
-                <div className="cat-bar-row" key={row.category}>
-                  <div className="cat-bar-row-head">
-                    <span className="cat-bar-row-label">
-                      <span className="cat-bar-row-swatch" style={{ background: colorFor(ACCOUNTS.SPENDING, row.category) }} />
+                <div className="ov-brow" key={row.category}>
+                  <div className="ov-brow-head">
+                    <span className="ov-chip ov-chip--fill ov-chip--cat" style={{ background: colorFor(ACCOUNTS.SPENDING, row.category, 'out') }}>
                       {row.category}
                     </span>
-                    <span className="cat-bar-row-value" style={{ color: row.health === 'over' ? 'var(--red)' : 'var(--muted)' }}>
+                    <span className="ov-brow-value" style={{ color: row.health === 'over' ? 'var(--red)' : 'var(--muted)' }}>
                       {formatCurrency(row.actual)} of {formatCurrency(row.budget)} ({displayPct}%)
                       {suffix && <span style={{ color: suffix.color }}>{suffix.text}</span>}
                     </span>
                   </div>
-                  <div className="cat-bar-track">
-                    <div
-                      className="cat-bar-fill"
-                      style={{ width: `${Math.min(100, displayPct)}%`, background: fillColorFor(row.health) }}
+                  <div className="ov-track">
+                    <i
+                      className={`ov-fill ov-fill--${row.health}${displayPct === 0 ? ' ov-fill--zero' : ''}`}
+                      style={{ width: `${Math.min(100, displayPct)}%` }}
                     />
                   </div>
                 </div>
@@ -509,99 +535,98 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="card-grid">
+      <div className="ov-balances">
         <div className="balance-card">
           <div className="balance-card-split">
             <div className="balance-card-col">
               <div className="balance-card-label">
-                <span className="balance-card-dot" style={{ background: 'var(--accent)' }} />
+                <span className="balance-card-dot" style={{ background: 'var(--sky)' }} />
                 Spending balance
               </div>
-              <div className="balance-card-value">{formatCurrency(scopedBal)}</div>
-              <div className={`balance-card-delta ${scopedDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
-                {formatSigned(scopedDelta)} this month
+              <div className="ov-balrow">
+                <div className="balance-card-value">{formatCurrency(scopedBal)}</div>
+                <span className={`ov-chip ${scopedDelta >= 0 ? 'ov-chip--lime' : 'ov-chip--tomato'}`}>
+                  {formatSigned(scopedDelta)} this month
+                </span>
               </div>
             </div>
             <div className="balance-card-col balance-card-col-secondary">
               <div className="balance-card-label">
-                <span className="balance-card-dot" style={{ background: 'var(--topup)' }} />
+                <span className="balance-card-dot" style={{ background: 'var(--pink)' }} />
                 Savings
               </div>
-              <div className="balance-card-value">{formatCurrency(savingsAccount?.balance ?? 0)}</div>
-              <div className={`balance-card-delta ${savingsDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
-                {formatSigned(savingsDelta)} this month
+              <div className="ov-balrow">
+                <div className="balance-card-value">{formatCurrency(savingsAccount?.balance ?? 0)}</div>
+                <span className={`ov-chip ${savingsDelta >= 0 ? 'ov-chip--lime' : 'ov-chip--tomato'}`}>
+                  {formatSigned(savingsDelta)} this month
+                </span>
               </div>
             </div>
           </div>
         </div>
         <div className="balance-card accent">
           <div className="balance-card-label">Net worth</div>
-          <div className="balance-card-value">{formatCurrency(netWorth)}</div>
-          <div className={`balance-card-delta ${netDelta >= 0 ? 'delta-positive' : 'delta-negative'}`}>
-            {formatSigned(netDelta)} this month
+          <div className="ov-balrow">
+            <div className="balance-card-value">{formatCurrency(netWorth)}</div>
+            <span className={`ov-chip ${netDelta >= 0 ? 'ov-chip--lime' : 'ov-chip--tomato'}`}>
+              {formatSigned(netDelta)} this month
+            </span>
           </div>
         </div>
       </div>
 
       <div className="two-col-grid">
-        <div className="card" style={{ marginBottom: 0 }}>
-          <h2 style={{ margin: '0 0 18px', font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>Top spending</h2>
-          {topCats.length === 0 ? (
-            <p className="empty-text">No spending yet this month.</p>
-          ) : topCats.map((c) => (
-            <div className="cat-bar-row" key={c.category}>
-              <div className="cat-bar-row-head">
-                <span className="cat-bar-row-label">
-                  <span className="cat-bar-row-swatch" style={{ background: c.color }} />
-                  {c.category}
-                </span>
-                <span className="cat-bar-row-value">{formatCurrency(c.value)}</span>
-              </div>
-              <div className="cat-bar-track">
-                <div className="cat-bar-fill" style={{ width: `${Math.max(3, Math.round((c.value / maxCat) * 100))}%`, background: c.color }} />
-              </div>
-            </div>
-          ))}
+        <div className="card">
+          <h2>Top spending</h2>
+          <div className="ov-hbars">
+            {topCats.length === 0 ? (
+              <p className="empty-text">No spending yet this month.</p>
+            ) : topCats.map((c) => {
+              const w = Math.max(3, Math.round((c.value / maxCat) * 100))
+              return (
+                <div className="ov-hbar" key={c.category}>
+                  <div className="ov-hbar-head">
+                    <span className="ov-hbar-label">
+                      <span className="ov-hbar-swatch" style={{ background: c.color }} aria-hidden="true" />
+                      <span className="ov-hbar-name">{c.category}</span>
+                    </span>
+                    <span className="ov-hbar-value">{formatCurrency(c.value)}</span>
+                  </div>
+                  <div className="ov-hbar-track">
+                    <i style={{ width: `${w}%`, background: c.color }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
-        <div className="card" style={{ marginBottom: 0 }}>
-          <h2 style={{ margin: '0 0 8px', font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>Recent activity</h2>
-          {recent.length === 0 ? (
-            <p className="empty-text">No transactions yet this month.</p>
-          ) : recent.map((r) => (
-            <div className="activity-row" key={r.id}>
-              <span className="activity-dot" style={{ background: r.color }} />
-              <div className="activity-main">
-                <div className="activity-comment">{r.comment}</div>
-                <div className="activity-meta">{r.meta}</div>
+        <div className="card">
+          <h2>Recent activity</h2>
+          <div className="ov-acts">
+            {recent.length === 0 ? (
+              <p className="empty-text">No transactions yet this month.</p>
+            ) : recent.map((r) => (
+              <div className="ov-act" key={r.id}>
+                <span
+                  className={`ov-badge${r.isTransfer ? ' ov-badge--transfer' : ''}`}
+                  style={{ background: r.color }}
+                  aria-hidden="true"
+                >
+                  {(r.category || '?').charAt(0).toUpperCase()}
+                </span>
+                <div className="ov-act-main">
+                  <div className="ov-act-comment">{r.comment}</div>
+                  <div className="ov-act-meta">{r.category} · {r.meta}</div>
+                </div>
+                <div className="ov-act-amount" style={{ color: r.amountColor }}>{r.amountText}</div>
               </div>
-              <div className="activity-amount" style={{ color: r.amountColor }}>{r.amountText}</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* alignItems: 'flex-start' overrides `.card-row`'s default
-          `align-items: center` — with center, the h2 (short, ~16px) would
-          center against the tallest sibling, which is the switcher/controls
-          div once `.month-switcher-wrap`'s reserved bottom padding (for the
-          single-line activity info) is counted, pushing "Breakdown" visibly
-          below the switcher's actual input row. flex-start top-aligns both
-          instead, and the h2's own marginTop then nudges it down onto the
-          switcher's ~40px input row specifically (not the wrap's full,
-          taller box). The inner row's gap is widened (12 -> 40) so the
-          MonthSwitcher's now-wider, single-line activity info has room to
-          extend rightward without reaching BreakdownControls (still flush
-          against the row's right edge via `.card-row`'s
-          `justify-content: space-between`). The view switch
-          (Combined | Spending | Savings) is deliberately the LEFTMOST
-          control, so that activity info still extends into the same free
-          gap toward BreakdownControls rather than underneath the switch.
-          Desktop widths: switch ~250 + switcher ~150 + Show ~190 + 2 x 40
-          gap ~ 670px, plus the ~90px heading, well inside the 1180px
-          container; the controls row wraps whenever it doesn't fit (base
-          `flex-wrap` in index.css, ~<900px) and gets a tighter gap at <=768px. */}
-      <div className="card-row" style={{ marginTop: 30, marginBottom: 12, alignItems: 'flex-start' }}>
-        <h2 style={{ margin: 0, marginTop: 13, font: '600 16px/1 var(--font-ui)', letterSpacing: '-.01em' }}>Breakdown</h2>
+      <div className="ov-breakdown-head">
+        <h2 className="ov-breakdown-title">Breakdown</h2>
         <div className="breakdown-heading-controls">
           <BreakdownViewSwitch view={breakdownView} onViewChange={setBreakdownView} />
           <MonthSwitcher
@@ -617,27 +642,27 @@ export default function DashboardPage() {
       <div className="card">
         <div className="card-row">
           <h2>Monthly insights</h2>
-          <span className="pill-tag">Savings rate {savingsRate}%</span>
+          <span className={`ov-chip ${savingsRate < 0 ? 'ov-chip--tomato' : 'ov-chip--lime'}`}>Savings rate {savingsRate}%</span>
         </div>
         <div className="money-flow-grid">
-          <div>
+          <div className="ov-flow ov-flow--in">
             <div className="money-flow-label">Money in</div>
-            <div className="money-flow-value" style={{ color: 'var(--green)' }}>{formatCurrency(sumIn)}</div>
+            <div className="money-flow-value">{formatCurrency(sumIn)}</div>
           </div>
-          <div>
+          <div className="ov-flow ov-flow--out">
             <div className="money-flow-label">Money out</div>
-            <div className="money-flow-value" style={{ color: 'var(--red)' }}>{formatCurrency(sumOut)}</div>
+            <div className="money-flow-value">{formatCurrency(sumOut)}</div>
           </div>
-          <div>
+          <div className="ov-flow">
             <div className="money-flow-label">Net</div>
             <div className="money-flow-value" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatSigned(net)}</div>
           </div>
         </div>
 
-        <div style={{ marginTop: 24 }}>
+        <div className="ov-daily">
           <div className="daily-spending-header">
             <span className="money-flow-label">Daily spending</span>
-            <span style={{ font: '500 10.5px/1 var(--font-num)', color: hasDailyBudget ? 'var(--accent)' : 'var(--muted)' }}>
+            <span className="ov-chip">
               {hasDailyBudget ? `Budget ${formatCurrency(dailyBudget)}/day` : 'No daily budget'}
             </span>
           </div>
@@ -646,12 +671,12 @@ export default function DashboardPage() {
               <div className="budget-line" style={{ bottom: `${Math.min(98, budgetPct)}%` }} />
             )}
             {dailyBars.map((bar, i) => {
-              // Edge-anchored tooltip alignment: a centered 150px-min-width
-              // tooltip only fits when the bar is >=~75px from each chart
-              // edge - on a narrow (mobile) chart that's roughly the outer
-              // ~24% of bars on each side. Bars in that outer band get a
-              // left/right-anchored tooltip (grows inward, never past the
-              // chart edge); the middle ~50% keep the base centered style.
+              // Edge-anchored tooltip alignment: a centered tooltip only fits
+              // when the bar is far enough from each chart edge - on a narrow
+              // (mobile) chart that's roughly the outer ~24% of bars on each
+              // side. Bars in that outer band get a left/right-anchored
+              // tooltip (grows inward, never past the chart edge); the middle
+              // ~50% keep the base centered style. (ARCH-0015)
               const tooltipAlign =
                 i < dailyBars.length * 0.25 ? 'left' : i > dailyBars.length * 0.75 ? 'right' : 'center';
               const tooltipClassName =
@@ -662,8 +687,8 @@ export default function DashboardPage() {
                 className="bar-chart-bar-wrap"
               >
                 <div
-                  className="bar-chart-bar"
-                  style={{ height: `${bar.height}%`, background: bar.bg, opacity: bar.opacity }}
+                  className={`bar-chart-bar bar-chart-bar--${bar.tone}`}
+                  style={{ height: `${bar.height}%` }}
                 />
                 <div className={tooltipClassName} role="tooltip">
                   <div className="bar-chart-tooltip-day">{monthShortLabel} {bar.day}</div>
@@ -689,12 +714,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="two-col-grid">
-        <DonutCard icon="↑" iconColor="var(--red)" label="Money out" centerLabel={outCenterLabel} cats={viewOut} mode={breakdownMode} />
-        <DonutCard icon="↓" iconColor="var(--green)" label="Money in" centerLabel={inCenterLabel} cats={viewIn} mode={breakdownMode} />
+        <DonutCard icon="↑" iconColor="var(--tomato)" label="Money out" centerLabel={outCenterLabel} cats={viewOut} mode={breakdownMode} />
+        <DonutCard icon="↓" iconColor="var(--lime)" label="Money in" centerLabel={inCenterLabel} cats={viewIn} mode={breakdownMode} />
       </div>
-      <div style={{ marginTop: 16 }}>
-        <InOutCompareCard totalIn={viewTotalIn} totalOut={viewTotalOut} />
-      </div>
+      <InOutCompareCard totalIn={viewTotalIn} totalOut={viewTotalOut} />
 
       {modalOpen && (
         <TransactionModal

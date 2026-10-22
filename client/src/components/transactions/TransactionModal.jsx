@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ACCOUNTS, ACCOUNT_NAMES } from '../../constants/categories.js'
 import { todayStr } from '../../utils/dateUtils.js'
 import { useCategories } from '../../contexts/categories.js'
+import { useCategoryColor } from '../../hooks/useCategoryColor.js'
 import CategoryManagerModal from './CategoryManagerModal.jsx'
+import RadioChoice from './RadioChoice.jsx'
 import { getModalRoot } from '../../utils/modalRoot.js'
 
 const TRANSFER_DIRECTIONS = [
@@ -26,6 +28,11 @@ function emptyTransferForm() {
 // direction doesn't clobber a comment the user already edited).
 export default function TransactionModal({ initialMode = 'normal', onClose, onCreateTransaction, onCreateTransfer }) {
   const { outgoingFor, incomingFor } = useCategories()
+  const colorFor = useCategoryColor()
+  const idBase = useId()
+  const directionLabelId = `${idBase}-direction`
+  const accountLabelId = `${idBase}-account`
+  const categoryLabelId = `${idBase}-category`
 
   const [mode, setMode] = useState(initialMode)
   const [normalForm, setNormalForm] = useState(() => emptyNormalForm(outgoingFor(ACCOUNTS.SPENDING).map((c) => c.name)))
@@ -183,37 +190,61 @@ export default function TransactionModal({ initialMode = 'normal', onClose, onCr
 
         {mode === 'normal' ? (
           <div className="modal-form-grid">
-            <label className="form-field">
-              Date
-              <input type="date" value={normalForm.date} onChange={(e) => setNormalField('date', e.target.value)} />
+            <label className={`txm-amt full${normalForm.direction === 'in' ? ' in' : ''}`}>
+              <span className="txm-amt-sign" aria-hidden="true">$</span>
+              <span className="visually-hidden">Amount</span>
+              <input type="number" step="0.01" min="0.01" placeholder="0.00" value={normalForm.amount} onChange={(e) => setNormalField('amount', e.target.value)} />
             </label>
-            <label className="form-field">
-              Account
-              <select value={normalForm.account_id} onChange={(e) => handleAccountChange(e.target.value)}>
-                {Object.entries(ACCOUNT_NAMES).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              Direction
-              <select value={normalForm.direction} onChange={(e) => handleDirectionChange(e.target.value)}>
-                <option value="out">Money out</option>
-                <option value="in">Money in</option>
-              </select>
-            </label>
-            <label className="form-field">
-              Category
-              <select value={selectedCategory} onChange={(e) => setNormalField('category', e.target.value)}>
-                {normalCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+            <div className="form-field">
+              <span id={directionLabelId}>Direction</span>
+              <RadioChoice
+                groupClassName="pill-group seg-full"
+                itemClassName="pill-btn"
+                labelledBy={directionLabelId}
+                value={normalForm.direction}
+                onChange={handleDirectionChange}
+                options={[
+                  { value: 'out', label: 'Money out' },
+                  { value: 'in', label: 'Money in' },
+                ]}
+              />
+            </div>
+            <div className="form-field">
+              <span id={accountLabelId}>Account</span>
+              <RadioChoice
+                groupClassName="pill-group seg-full"
+                itemClassName="pill-btn"
+                labelledBy={accountLabelId}
+                value={normalForm.account_id}
+                onChange={handleAccountChange}
+                options={Object.entries(ACCOUNT_NAMES).map(([id, name]) => ({ value: id, label: name }))}
+              />
+            </div>
+            <div className="form-field full">
+              <span id={categoryLabelId}>Category</span>
+              {normalCategories.length === 0 ? (
+                <span className="empty-text" role="status">No {normalForm.direction === 'out' ? 'outgoing' : 'incoming'} categories yet.</span>
+              ) : (
+                <RadioChoice
+                  groupClassName="txm-catpick"
+                  itemClassName="txm-cat"
+                  labelledBy={categoryLabelId}
+                  value={selectedCategory}
+                  onChange={(c) => setNormalField('category', c)}
+                  options={normalCategories.map((c) => ({
+                    value: c,
+                    label: c,
+                    style: { '--chip': colorFor(selectedAccountId, c, normalForm.direction) },
+                  }))}
+                />
+              )}
               <button type="button" className="link-btn" ref={manageLinkRef} onClick={openManager}>
                 Manage categories
               </button>
-            </label>
+            </div>
             <label className="form-field">
-              Amount
-              <input type="number" step="0.01" min="0.01" placeholder="0.00" value={normalForm.amount} onChange={(e) => setNormalField('amount', e.target.value)} />
+              Date
+              <input type="date" value={normalForm.date} onChange={(e) => setNormalField('date', e.target.value)} />
             </label>
             <label className="form-field">
               Note
@@ -264,7 +295,7 @@ export default function TransactionModal({ initialMode = 'normal', onClose, onCr
 
         <div className="modal-actions">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn" onClick={handleSubmit} disabled={submitting}>
+          <button type="button" className={mode === 'transfer' ? 'btn-secondary' : 'btn'} onClick={handleSubmit} disabled={submitting}>
             {mode === 'transfer' ? 'Add transfer' : 'Add transaction'}
           </button>
         </div>

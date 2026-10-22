@@ -4633,3 +4633,198 @@ VISUAL-VERIFICATION — PARTIALLY DONE by me via Playwright on the live prod sit
 - **Resolution:** RESOLVED by engineering-director — re-measured live: scrollWidth == viewport and controls within container at 375/600/768/769/800/860/900/1000/1100/1366; 769-860 wraps Show to a 2nd row with no collision against "Earliest:" line (screenshot @800); >=900 single row.
 
 <!-- ARCH-0018:END -->
+
+<!-- ARCH-0019:START -->
+# [ARCH-0019] Colour Block re-skin STEP 1: handoff tokens + Bricolage font + legacy CSS var aliases (senior-frontend-dev, engineering-director; theme.js, ThemeContext.jsx, index.css, index.html)
+
+### [engineering-director-20261021T082231] Re-skin STEP 1 framing: tokens + font + aliases only
+- **From:** engineering-director
+- **For:** senior-frontend-dev, qa-engineer
+- **Status:** RESOLVED
+- **Detail:** Branch `reskin/colour-block` (off main). Scope = design/DESIGN-HANDOFF.md §9 step 1 only: replace THEMES token values in client/src/contexts/theme.js (keys refined->dark, editorial->light, terminal->mono set; keys and STORAGE_KEY unchanged), alias all legacy vars, swap Google Font to Bricolage Grotesque in client/index.html, fix 4 `box-shadow: var(--shadow)` usages in client/src/index.css (lines ~257/357/483/2246), keep tabular-nums on numbers. NO component restyling, header, colorFor palette, API/auth/hooks/state/route/localStorage changes. Do not commit; leave unrelated dirty files (.gitignore, TEAM-BOARD.md, design/, server/budget-local.db) alone.
+- **Resolution:** Step 1 delivered by senior-frontend-dev and verified by director: diff limited to theme.js, ThemeContext.jsx (colorScheme), index.css, index.html, DashboardPage.jsx:640 (fontVariantNumeric). Build passes. Lint's 2 errors reproduce on pristine HEAD worktree (pre-existing). Nothing committed. Stopped before step 2.
+
+### [senior-frontend-dev-20261021T083000] Re-skin STEP 1 outcome: tokens + font + aliases done; visual check needed
+- **From:** senior-frontend-dev
+- **For:** engineering-director, qa-engineer
+- **Status:** RESOLVED
+- **Detail:** Changed client/src/contexts/theme.js (handoff tokens per theme, keys unchanged; legacy aliases inline on .app-root), ThemeContext.jsx (colorScheme only), index.css (box-shadow x4, tabular-nums x29, body 15px, removed broken :root aliases), index.html (Bricolage font), DashboardPage.jsx:640 (fontVariantNumeric on one inline span). Build passes; lint has 2 pre-existing set-state-in-effect errors (DashboardPage:119, TransactionsPage:42), untouched. Pre-existing bug found: :root `--money-in: var(--green)` never resolved (green undefined at html), so index.css:~1859 background was transparent; now fixed by moving aliases into THEMES. VISUAL-VERIFICATION REQUEST (no browser as subagent): load Overview/Transactions/Budget at 1280px and 390px in Dark/Light/Mono; check faint text, transfer dots, donut transfer segment, warning text, buttons with 3px hard shadow, account-switcher menu, auth card, import AI consent panel; confirm Bricolage loads and numbers align.
+- **Resolution:** engineering-director (live Playwright in this invocation, local server on throwaway SQLite DB) verified at 1280px: Overview/Transactions/Budget in Dark/Light/Mono, plus auth card, account menu, add-account modal. Bricolage loads; tabular numbers align; nothing invisible; faint=muted transfer dots/rows visible; --warning-text yellow on Dark, ink on Mono; theme persists across reload (STORAGE_KEY intact); .month-activity-dot-filled now renders (formerly transparent). 390px and import consent panel not checked (out of step-1 ask) — carried in director report. Entry ID normalized from malformed T0900 by director.
+<!-- ARCH-0019:END -->
+
+<!-- ARCH-0020:START -->
+# [ARCH-0020] Colour Block re-skin STEP 2: shared primitives (cards .blk, buttons, segmented .pill-group/.modal-tabs, chips, inputs + :focus-visible/--focus, month switcher, modal + phone bottom sheet, .warn) in index.css (senior-frontend-dev, junior-frontend-dev, engineering-director)
+
+### [engineering-director-20261021T084215] Re-skin STEP 2 framing: shared primitives only
+- **From:** engineering-director
+- **For:** senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Branch `reskin/colour-block` (step 1 already applied, uncommitted). Scope = DESIGN-HANDOFF.md §9 step 2 (§3 shape + §5 components): .blk look on card containers, buttons (.btn/.btn-secondary/.btn-ghost/.btn-danger), segmented (.pill-group/.pill-btn), chips (.pill-tag, category cells), inputs/selects/textarea + global :focus-visible, .month-switcher* as .ms/.mscap, .modal-overlay/.modal-panel as .scrim/.modal (+ CSS-only phone bottom sheet), .clear-history-warning as .warn. Text on coloured fills always #121212. NOT in scope: header/phone tab bar (step 3), page layouts (step 4), §8 items, colorFor()/palette. Visual-only; restyle existing classes in client/src/index.css; JSX only for presentational className/wrapper. iOS 16px rule stays last in index.css. Month-switcher constraint from ARCH-0001: keep .month-activity-info absolute with top: calc(100% - var(--month-activity-reserve)) and .month-switcher-wrap position:relative + reserve padding. No commits.
+- **Resolution:** Step 2 delivered (senior-frontend-dev primitives + junior-frontend-dev nowrap fixes) and verified by director: no JSX changes; lint = the 2 pre-existing set-state-in-effect errors only; build passes; iOS 16px block still last; ARCH-0001 month-switcher positioning intact. Stopped before step 3. No commits.
+
+---
+
+### [senior-frontend-dev-20261021T084832] Re-skin STEP 2 done: shared primitives in index.css (+ --focus token)
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Responds to engineering-director-20261021T084215. Only client/src/index.css and client/src/contexts/theme.js (new per-theme --focus token) changed; zero JSX edits. Lint = only the 2 pre-existing set-state-in-effect errors; build passes. .blk applied to .card/.balance-card/.table-card/.filter-strip/.account-summary-strip/.auth-card. Buttons: .btn=tomato, .btn-secondary=sky, .btn-ghost=flat card, .btn-danger=dashed --neg, black confirm via scoped .modal-panel .btn-danger (and Budget inline "Confirm clear"). Segmented control also covers .modal-tabs. Phone bottom sheet is CSS-only in a new <=760px block placed before the iOS 16px rule (still last). Focus: sky ring fails 3:1 on light and mono page backgrounds, so --focus = sky (dark) / ink (light, mono); decision flagged. Note: live .month-activity-info has NO right:0 (an earlier fix removed it deliberately, single nowrap line); kept as-is, top calc/absolute/reserve untouched.
+- **Resolution:** Verified by director (diff, lint, build, live browser). Two wrap defects found in verification (segmented 'Sign up', category chips at 390px) routed to junior-frontend-dev and fixed.
+
+---
+
+### [senior-frontend-dev-20261021T084833] Visual-verification request: re-skin STEP 2 (all 3 themes, 1280px and 390px)
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** No browser available to me. Please check in dark/light/mono at 1280px and 390px: (1) Buttons on Transactions: + Transaction tomato, Transfer/Export/Manage categories sky, Clear all history dashed; hover lift, active press, disabled (Budget Copy from with no prior; ExportModal Export) dim with no shadow; text #121212 on fills. (2) Modals: New transaction (tabs segmented, lime active), Export (scope seg), Clear history + Delete account (warn box, black confirm button, dashed Cancel/Back is ghost), Category manager (nested, account seg). At 390px each is a bottom sheet with grab handle, 26px top radius, scrolls inside 92% height. (3) Month switcher on Transactions and Dashboard Breakdown: 44px bar, dot, caption/Earliest/Jump line sits below without overlapping the next card, bar width unchanged when caption changes, mobile wrapped 3-line caption still inside reserve; Account seg on the filter strip aligned to the switcher top. Budget page switcher too. (4) Focus ring via Tab on button, input, seg button, month switcher cells: visible in all themes (mono/light use ink). (5) Chips: Budget/day pill (dashed when editable), Savings rate, category cells with coloured square dots (colours unchanged). (6) Inputs and selects (2px border, card background, no checkbox regression on Stay signed in). (7) BreakdownViewSwitch: arrow keys still move focus; active = lime with dark text.
+- **Resolution:** engineering-director checked live (Playwright, throwaway DB, dummy secrets) Dark/Light/Mono at 1280 and 390: login, Overview, Transactions, Budget, transaction modal + 390 bottom sheet (grab handle, 26px top radius), delete-account modal (black confirm), Budget inline clear confirm (black + ghost), disabled 'No prior budgets', hover lift, input focus rings (sky dark, ink light/mono). Screenshots in .playwright-mcp/reskin-step2/.
+
+---
+
+### [junior-frontend-dev-20261021T085200] Re-skin STEP 2 fixes: nowrap on segmented label and category chip (CSS only)
+- **From:** junior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Fixed two live-verification defects in `client/src/index.css` only. (1) Added `white-space: nowrap;` to the shared `.pill-btn` base rule (line 205 block, new line 213) so "Sign up" no longer wraps at 1280px/390px. Padding, widths and active-state rules untouched. (2) Added `white-space: nowrap;` to the `.category-cell` chip rule (line 1375 block, new line 1387) so "Transfer-Out"/"Transfer-In" stay on one line at 390px. Colours and `.category-dot` untouched. No JSX, no other rules changed. The `@media (pointer: coarse)` iOS 16px block is still the last rule (line 2840). Not committed. Visual re-check at 390px still needed (no browser available to me). Timestamp in ID is estimated, not read from a clock.
+- **Resolution:** Verified by director: white-space:nowrap on .pill-btn and .category-cell, lint/build unchanged. Entry ID normalized from estimated T093000 by director.
+
+---
+
+### [junior-frontend-dev-20261021T085201] Visual-verification request: nowrap fixes (segmented "Sign up", category chips)
+- **From:** junior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** No browser available to me. Please check at 1280px and 390px in all three themes: (1) Auth screen segmented tabs: "Sign up" and "Log in" each render on one line; other `.pill-btn` segmented controls (theme switcher, Breakdown view/mode, account seg, Export scope, modal tabs) do not wrap. (2) Transactions table at 390px: "Transfer-Out" and "Transfer-In" category chips render on one line; table card scrolls horizontally if needed; dot colours unchanged.
+- **Resolution:** engineering-director re-checked live at 390px Light: 'Sign up' tab single-line, Transfer-Out/In chips single-line. Entry ID normalized from estimated T093001 by director.
+<!-- ARCH-0020:END -->
+
+<!-- ARCH-0021:START -->
+# [ARCH-0021] Colour Block re-skin STEP 3: header bar, account menu, phone tab bar + per-page portaled FAB + account/style bottom sheet (Header.jsx, AccountSwitcher.jsx, StyleSwitcher.jsx, AddFab.jsx, index.css; senior-frontend-dev, engineering-director)
+
+### [engineering-director-20261021T085807] Re-skin STEP 3 framing: header + phone tab bar/sheet
+- **From:** engineering-director
+- **For:** senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Branch `reskin/colour-block` (steps 1+2 applied, uncommitted). Scope = DESIGN-HANDOFF.md §6 Header, §7 phone, §8 item 3 (approved). Desktop bordered header bar (wordmark, nav pills active var(--inv)/var(--oninv), Style segmented, sky account pill + guest tag + chevron, prototype .menu dropdown). Phone ≤760px: wordmark + round sky account button; fixed bottom tab bar with tomato "+" FAB; account+style bottom sheet portaled to #modal-root; page-level add buttons hidden on phones (CSS). FAB decision (director): modal state is page-local (DashboardPage.jsx:87, TransactionsPage.jsx:25) — FAB is rendered inside those two pages beside the existing button, calling the SAME handler, portaled via createPortal into #modal-root (escapes .page-animate transform). No new/lifted state, context, event bus or route. Budget page has no add flow → no FAB there (proposal to user). If this proves impossible, STOP and report. Presentational JSX only; no provider/hook/API/localStorage/auth logic changes. No commits.
+- **Resolution:** Step 3 delivered by senior-frontend-dev and verified by director: lint = the 2 pre-existing set-state-in-effect errors only (lines shifted +1 by new import), build passes, iOS block last, AccountSwitcher auth handler usage identical to HEAD (switchAccount/logout/AddAccountModal/DeleteAccountModal), FAB via per-page createPortal with the existing handlers (no new state). Stopped before step 4. No commits.
+
+---
+
+### [senior-frontend-dev-20261021T090300] Re-skin STEP 3 outcome + visual-verification request
+- **From:** senior-frontend-dev
+- **For:** engineering-director, qa
+- **Status:** RESOLVED
+- **Detail:** Step 3 implemented, uncommitted. Lint = only the 2 pre-existing set-state-in-effect errors; build passes; iOS (pointer: coarse) block still last in index.css. Changed JSX: layout/Header.jsx, layout/AccountSwitcher.jsx, new layout/StyleSwitcher.jsx, new layout/AddFab.jsx, pages/DashboardPage.jsx and pages/TransactionsPage.jsx (FAB + page-add-btn class only). FAB is per-page via createPortal to #modal-root calling the same handler; no new state/context. Legacy 768px header/AccountSwitcher rules deleted, phone rules now only in the 760px block. NEEDS VISUAL VERIFICATION (no browser available to me), in all 3 styles: (1) 1280px: bordered header bar, wordmark, nav pills active = inverted, Style segmented, sky account pill (#121212 text, black guest tag), dropdown with sky current row, Escape closes and refocuses pill. (2) 765px and 761px: full desktop header, wraps cleanly, no horizontal scroll, no half-phone state. (3) 760px and 390px: wordmark + round 44px sky button, no sideways scroll, bottom tab bar visible with aria-current highlight, last content not hidden behind it (scroll to bottom on all 3 pages), safe-area bottom ok. (4) Overview and Transactions at 390px: tomato + FAB at the right end of the tab bar, opens New transaction modal; page Add buttons hidden; Transfer/Export etc still visible. (5) Budget at 390px: no FAB, 3 equal tabs. (6) Round button opens bottom sheet: Style switcher works, account list/add/log out/delete work, Escape and scrim click close and return focus to round button, focus enters sheet on open.
+- **Resolution:** engineering-director checked live (Playwright, throwaway DB, dummy secrets): 1280 Dark/Light/Mono header + nav active pill + aria-current; desktop menu add account (login secondacct) + switch back; 390 phone header, tab bar (3 tabs, no FAB on Budget), FAB opens add modal on Overview, sheet covers tab bar, account sheet (focus to Close on open, style switch Light/Dark from sheet, Delete account opens modal), last content clears tab bar; guest tag at 1280; 765px desktop header wraps to 2 rows without overflow; 760px phone layout. Escape-to-close verified by code only (no key-press tool). Screenshots in .playwright-mcp/reskin-step3/.
+<!-- ARCH-0021:END -->
+
+<!-- ARCH-0022:START -->
+# [ARCH-0022] Colour Block re-skin STEP 4: Overview, Transactions (+phone day cards), Budget, Login, modals (segmented Direction/Account, category chip row), unique category colours (categoryColor.js, useCategoryColor.js, RadioChoice.jsx, TransactionModal.jsx, DayGroup.jsx, TransactionRow.jsx, BudgetPage.jsx, AuthScreen.jsx; senior-frontend-dev x4, engineering-director)
+
+### [engineering-director-20261021T092200] Re-skin STEP 4 framing: pages (Overview, Transactions, Budget, Login, modals)
+- **From:** engineering-director
+- **For:** senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Branch `reskin/colour-block` (steps 1-3 applied, uncommitted). Scope = DESIGN-HANDOFF.md §4/§6/§7 page layouts + §8 items 1, 2, 4 (approved). Dispatched SEQUENTIALLY in three sub-steps because all touch client/src/index.css: (A) presentational category-colour helper (utils/categoryColor.js, §4 index rule; CategoriesContext/colorFor untouched) + Overview; (B) Transactions desktop grid + §8.4 phone day cards + .sig spend signals; (C) Budget + Login + modals incl. §8.1 segmented Direction/Account and §8.2 category chip row. Hard rules: presentational only; same setters/handlers/payloads; keep all copy, aria, validation, editingId flow, groupByYearMonthDay/dayTotals/AccountingValue; health thresholds stay <90/90-100/>100; no breakpoint changes (header wrap 761-1000 left as-is). Director captured baseline request bodies (POST transaction out/in, POST transfer, PUT inline edit, PUT budget) via a logging proxy for payload comparison. No commits.
+- **Resolution:** Step 4 complete and verified; lint = 2 pre-existing errors only, build passes, iOS block last. Payload proof: old-form vs new-form POST out/in/transfer byte-identical; inline-edit PUT (desktop + phone card) same keys/order; budget PUT identical (both double-fire Enter+blur, pre-existing); copy-from/clear send {month}. Re-run after colour change: still byte-identical. No commits. Stopped after step 4.
+
+### [senior-frontend-dev-20261021T093015] STEP 4A outcome: category-colour helper + Overview re-skin
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Done, uncommitted, presentational only. (1) New client/src/utils/categoryColor.js + hooks/useCategoryColor.js (drop-in colorFor(accountId, name, direction?)): index in outgoingFor/incomingFor order -> var(--p{i%10}) out / var(--p{(i+6)%10}) in; transfer names -> var(--card); miss (deleted, wrong account, case) -> exact then case-insensitive match, else existing context colorFor() value, else #8A8F98; never undefined. Switched: DashboardPage, BudgetPage, TransactionRow. CategoriesContext, breakdown.js (TRANSFER_COLOR kept), server colours untouched. Left on raw category.color: CategoryManagerModal swatch (sub-step C). (2) DashboardPage restyled under a .ov root class (CSS block before the 768px block + phone rules in the 760px block; iOS 16px rule still last); DonutChart.jsx ring/outline restyle. Lint = 2 pre-existing errors only; build passes. Gaps: no new metrics added; Spent today meter = spentToday / dailyBudget (both existing); app has 2 balance containers (Spending+Savings split card, Net worth) vs prototype 3 cards.
+- **Resolution:** Verified by director: Overview renders in Dark/Light/Mono at 1280 and 390; helper fallback never undefined. Superseded colour rule by user decision (unique colours) in entry senior-frontend-dev-20261022T111214.
+
+### [senior-frontend-dev-20261021T093016] VISUAL-VERIFICATION REQUEST: Overview (STEP 4A)
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** No browser available to me. Please check route / at 1280px and 390px in dark, light and mono. (a) Stat tiles: values do not overflow (cqi font scaling), Spent today meter, lime/sky text is dark. (b) Budget card legend, 2-col rows, health fills lime/yellow/tomato (thresholds <90/90-100/>100). (c) Net worth card inverted in all themes. (d) Top spending hbars: label/value readable over fill and over --soft. (e) Breakdown heading row: view radiogroup + MonthSwitcher + Show toggle alignment, activity caption not colliding. (f) Daily chart: dashed budget line above bars, tooltip not clipped at left/right edges on 390px (ARCH-0015), 160px chart height. (g) Donuts 200px / 170px phone: ring + outline, centre text fits, legend (per-row bars intentionally hidden). (h) In vs. out bars + baseline. (i) Editing the "Budget $X/day" chip (click, Enter, Escape, No budget) and FAB still opens the modal on phone. (j) Combined view colour collisions between the two accounts (same palette index).
+- **Resolution:** engineering-director verified live (Playwright; throwaway DB, dummy secrets, logging proxy; never server/.env.local): Overview Dark/Light/Mono 1280 + Light 390; chart/donut phone sizes OK; Top spending label defect found and fixed in 4B. ID normalized from duplicate 093015 by director.
+
+### [senior-frontend-dev-20261021T094016] STEP 4B outcome: Transactions re-skin + phone day cards + Overview hbar fix
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Done, uncommitted, presentational only. Files: pages/TransactionsPage.jsx (.tx root class, signals+balances row, sky/pink account dots, tx-btn-plain on Export/Manage); components/transactions/{TransactionGroup,DayGroup,TransactionRow}.jsx; index.css (old Transactions block replaced by .tx-scoped rules, phone rules inside the 760px block, hbar chips after .ov-hbar .on-fill; iOS 16px rule still last). SINGLE render path: one table (explicit ARIA roles, CSS grid rows; each day is a tbody = card on phones), so exactly one EditRow can exist for editingId, no duplicate inputs or tab stops. New local UI state: useState(open) in ReadRow only (phone tap-to-reveal; per-row, several can be open). Phone a11y: whole-row button.tx-row-toggle with aria-expanded/aria-controls, display:none on desktop; actions are real buttons (aria-labels unchanged, visible Edit/Delete text), display:none until open; thead stays visually-hidden (not display:none) so cells keep column headers. Edit/Delete call the same onEdit(txn.id)/onDelete(txn) handlers; EditRow logic untouched (same fields, Enter/Escape, role=alert row). Spend signal: highlight-orange dot = --yellow, highlight-red dot = --tomato (2px --line ring); thresholds logic and legend untouched. Overview hbar: label and value sit on card-coloured chips (legible over any fill, all themes). Lint: only the 2 pre-existing set-state-in-effect errors; build passes.
+- **Resolution:** Verified by director: desktop grid + phone day cards, single EditRow render path, inline edit PUT shape unchanged, delete reaches existing confirm (handler code unchanged). C:	mp_tx scratch dir later removed by the coordinator on user instruction (director declined to bypass the blocked rm).
+
+### [senior-frontend-dev-20261021T094017] VISUAL-VERIFICATION REQUEST: Transactions (STEP 4B) + Overview Top spending
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** No browser available to me. Please check /transactions at 1280px, ~900px and 390px in dark, light, mono. Desktop: (a) title + pills (+ Transaction, Transfer, Export, Manage categories, divider, dashed Clear all history); FAB still opens the modal on phone; (b) filter card: MonthSwitcher caption geometry (ARCH-0001), no collision with the Account segmented control; (c) spend-signal chips + balances strip (sky/pink dots); (d) table: inverted header, yellow day chips, 2px hard divider between days (ARCH-0010), totals + per-account sub-rows on a multi-account day, hatch on transfer rows with IN/OUT tags, dot gutter + paren alignment of Out and Balance, horizontal scroll below 1042px; (e) inline edit: sky row, inputs fit, Enter saves, Escape cancels, error row legible, transfer edit has locked category and omits category in the PUT, delete confirm. Phone: (f) one card per day, yellow header (label + day sum), badge/note/category . account/amount/balance; (g) tap row reveals Edit/Delete, tap again hides; Tab/Enter/Space on the row; (h) Edit opens the form inside the card (labels, Save/Cancel), error under it; (i) day totals line wraps cleanly at 360px. Overview: (j) Top spending with a short bar (e.g. Drinks ~16%): label/value chips readable in all themes.
+- **Resolution:** engineering-director verified live (Playwright; throwaway DB, dummy secrets, logging proxy; never server/.env.local): Transactions Dark/Light/Mono 1280, Dark 390 cards (tap-to-reveal aria-expanded, edit in card), transfer hatch/badges, ARCH-0007 day money-in excludes transfers. ID normalized from duplicate 094016 by director.
+
+### [senior-frontend-dev-20261021T094845] STEP 4C outcome: Budget + Login + modals (incl. approved 8.1 / 8.2)
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Done, uncommitted, presentational only. Budget: .bg root, lime Total budgeted box, 2-col row cards (palette chip via useCategoryColor 'out', "$x of $y" + suffix + health pill %, .bg-track, "$" prefix is an aria-hidden span outside the input so value/blur/Enter/PUT are untouched; ids + hidden labels kept; thresholds still budgetHealth.js <90/90-100/>100; lime/yellow/tomato fills, #121212 text). Login: split screen (lime panel: wordmark, aria-hidden tilted tiles, tagline; card: tabs, fields, tomato submit, or, sky guest, note); tiles hidden <=760px; AuthForms.jsx untouched (CSS only). TransactionModal: new components/transactions/RadioChoice.jsx (radiogroup/radio, aria-labelledby the visible label span, roving tabindex, arrows/Home/End, re-click of the active option is a no-op like an unchanged select). Direction -> handleDirectionChange('out'|'in'); Account -> handleAccountChange(id) where id is the STRING key from Object.entries(ACCOUNT_NAMES), exactly as e.target.value was; Category -> setNormalField('category', name). State shape, validation, payload untouched; transfer mode untouched except submit is sky. Amount field moved to the top, tomato/lime tint. CategoryManagerModal swatch now uses the helper (no colour is editable or saved there; createCategory sends name/list/account_id only). Export/Clear/AddAccount/DeleteAccount restyled via CSS (+ seg-full class on Export scope). NOTE: the import wizard JSX (components/imports/*, ImportSuggestAI) does not exist in this repo; only orphan .import-* CSS, which I restyled to the same primitives. Lint = the 2 pre-existing errors; build passes; iOS 16px block still last (added .auth-form .form-field input and .bg-money input).
+- **Resolution:** Verified by director: segmented Direction/Account + category chip row produce byte-identical payloads; Budget $ prefix visual only; CategoryManagerModal swatch presentational. Import wizard absent (removed per ARCH-0001; CLAUDE.md stale).
+
+### [senior-frontend-dev-20261021T094846] VISUAL-VERIFICATION REQUEST: Budget, Login, modals (STEP 4C)
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** No browser available to me. Check at 1280px and 390px in dark, light, mono. /budget: (a) title row + Manage categories + MonthSwitcher; lime total box; (b) Copy from / Clear / inline confirm (black Confirm clear + ghost Cancel); (c) row cards: chip colour, pill % colour at 89/90/100/101%, bar fill, "$" box focus ring, typing/Enter/blur still PUTs, empty commits 0. Login (log out first): (d) split screen, tiles not clipping at ~1000px, tagline legible, phone shows lime band without tiles; no tab bar/FAB/header visible; (e) tabs, Stay signed in, error alert, guest button + note. Modals: (f) New transaction: amount tint flips tomato/lime with Money out/in, placeholder legible, Direction/Account segmented (click + arrow keys + Tab only lands on the checked one), Category chip row wraps with many categories, switching Account/Direction resets category to first, empty list shows "No outgoing/incoming categories yet."; payloads vs baseline A/B/C; (g) transfer tab radio rows (sky when chosen) and sky Add transfer; (h) Manage categories chip colours match the rest of the UI, Add/Remove still work; (i) Export, Clear history (both steps), Add account (lime submit), Delete account; bottom-sheet at 390px; (j) focus ring visible on every new control.
+- **Resolution:** engineering-director verified live (Playwright; throwaway DB, dummy secrets, logging proxy; never server/.env.local): Budget Dark/Mono 1280 + Mono 390, copy-from/clear, login split screen Light 1280 + Mono 390, login error copy, signup validation + signup, guest, delete account (DELETE /api/auth/me), Export/Clear-history/Category-manager/Add-account/Delete-account modals. ID normalized from duplicate 094845 by director.
+
+### [engineering-director-20261022T110115] Step 4 verification paused: local services reaped for low memory
+- **From:** engineering-director
+- **For:** all
+- **Status:** RESOLVED
+- **Detail:** Step 4 A/B/C implemented; lint (2 pre-existing errors only) and build pass. Live verification done so far: Overview 1280 Dark (index colour rule confirmed), Transactions desktop + 390 phone cards (desktop inline-edit PUT and phone-card edit PUT match baseline shape; delete reaches the native confirm — handler unchanged), TransactionModal out/in and transfer POST bodies byte-identical to old-form baselines, budget Enter commit identical to baseline (both send 2 PUTs: pre-existing Enter+blur double commit). PAUSED: Claude Code reaped the API server/proxy/Vite during idle for low memory and says not to restart without being asked. Remaining: budget copy-from/clear, login/signup/guest, Light/Mono and 390 sweep of Overview/Budget/Login/modals. Temp DB + proxy logs (incl. baselines) kept in %TEMP%\ledger-reskin4-verify.db and %TEMP%\ledger-proxy\.
+- **Resolution:** User approved restarting the local test servers; remaining verification completed (see framing entry engineering-director-20261021T092200). All servers stopped and temp DB/proxy artifacts deleted afterwards.
+
+### [senior-frontend-dev-20261022T111214] Unique category colours + modal tab split
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Done, uncommitted, presentational only. (1) utils/categoryColor.js rewritten, hooks/useCategoryColor.js now ranks ALL non-system categories (both accounts, both directions) in one list sorted by server id (creation order; adding a category appends a fresh colour, existing ones do not move; deleting one still shifts later ranks). Rank<10 -> var(--p{r}); rank>=10 -> generated pastel (golden-angle hue 137.508 from 20, S72, L cycling 74/64/84/70, skip hues within 14deg of 11/47/74, contrast >=4.5 vs #121212, greedy CIE76 dE>=22 from p0-p9, lime/yellow/tomato and prior picks, threshold steps down to 6 only if pool runs dry). Mono (theme key terminal): hook reads useTheme(); distinct greys 0x80..0xF0 in golden-ratio order (>=4.5 vs #111), theme.js terminal --p0..--p9 now derived from monoGrey; ~6-8 reliably distinguishable (first 8 ranks >=10 levels apart), more are unique but hard to tell apart. Transfers keep var(--card); TRANSFER_COLOR in breakdown.js untouched; no caller signature changes. Proof script run (47 categories, all unique in colour and mono, contrast, reserved-hue and stability asserts) and deleted. (2) index.css: .modal-tabs .pill-btn flex 1 1 0 centred (all .modal-tabs users are already width:100%; AuthScreen tabs and AddAccountModal now consistent). Lint = the 2 pre-existing errors; build passes; iOS coarse block still last. Visual check needed: TransactionModal tabs desktop + phone sheet, Mono chips, a Combined donut with many categories.
+- **Resolution:** Verified by director with an independent proof against live data: 22 seeded categories unique in light/dark/mono, min contrast 4.75/4.75/4.78, none near reserved budget-health colours, BASE_PALETTE mirrors theme.js, mono tokens == monoGrey; forced-duplicate sanity case fails as required; POST new category -> fresh colour, 0 existing recoloured. Modal tabs split evenly (Transaction/Transfer, Add account, login).
+<!-- ARCH-0022:END -->
+
+<!-- ARCH-0023:START -->
+# [ARCH-0023] Colour Block re-skin STEP 5: programmatic WCAG AA contrast audit (Playwright + getComputedStyle) across 3 styles x 1280/390, segmented selected-state ring, placeholder contrast, Export month-switcher width (index.css, ExportModal.jsx; senior-frontend-dev, junior-frontend-dev, engineering-director)
+
+### [engineering-director-20261022T113055] Re-skin STEP 5 framing: contrast pass + Export switcher fix
+- **From:** engineering-director
+- **For:** senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Branch `reskin/colour-block` (steps 1-4 uncommitted). Director ran a programmatic WCAG audit (Playwright + getComputedStyle; 72 scenarios = 4 pages + 8 modals/menus x 3 styles x 1280/390; 10,476 text elements; validated against injected known-bad cases). Baseline: 0 text failures, 0 overflow, 0 focus failures; failures = segmented selected state (lime #CFF25A / mono #D9D9D9 fill vs #FFFFFF = 1.27 / 1.41, need 3:1) in Light/Mono; placeholders (Dark #757575 on #1C1C1C 3.7; amount field "0.00" on tomato 3.46-3.6, mono 3.02). Code-level: .btn-sm:hover color var(--accent) (tomato icon on white ~2.9), .balance-card.accent .balance-card-label color var(--accent). Plus user-approved Export modal month-switcher stretch fix. Visual-only; no fill colour changes; Mono greys/order untouched; no CLAUDE.md edits; no commits.
+- **Resolution:** Step 5 complete. Director audit (Playwright + getComputedStyle, validated against injected known-bad cases): before = 0 text, 0 focus, 0 overflow failures; 22 segmented selected-state boundary failures (Light lime 1.27, Mono grey 1.41) + 7 placeholder failures (Dark 3.7, amount field 3.02-3.6); after = 0 findings across 72 scenarios / 11,151 text elements. Export switcher fixed (1280 + 390 verified). Final add-transaction payload byte-identical to old-form baseline. Lint 2 pre-existing errors only; build passes. 24-shot page set + 2 Export shots in .playwright-mcp/reskin-step5/. No commits.
+
+### [senior-frontend-dev-20261022T113207] Re-skin STEP 5 outcome: contrast fixes + Export switcher
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Edited client/src/index.css and ExportModal.jsx (class export-month-field). Selected segment: inset 2px var(--line) ring on .pill-btn.active/[aria-pressed]/[aria-checked] (no fills changed, no layout shift). Global ::placeholder var(--muted) opacity 1; amount placeholder #121212 weight 500 (ratios 5.43-14.72 on all tints). .btn-sm:hover and .balance-card.accent label now ink; checkbox accent-color var(--inv). Export month wrap align-self:flex-start (ARCH-0001 props untouched). Lint = 2 pre-existing errors; build passes.
+- **Resolution:** Verified by director: inset 2px var(--line) ring on selected segments now measured (box-shadow parsed; ~18:1 vs white), placeholders pass in all themes, .btn-sm:hover and .balance-card.accent label switched to ink. Export fix selector did not match (bare .month-switcher, no wrap) - corrected by junior-frontend-dev. Status normalized from non-standard DONE by director.
+
+### [junior-frontend-dev-20261022T114000] Re-skin STEP 5 outcome: Export month-switcher selector fix
+- **From:** junior-frontend-dev
+- **For:** engineering-director, senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** `client/src/index.css` ~line 2786: selector widened to `.export-month-field .month-switcher-wrap, .export-month-field > .month-switcher` with `align-self: flex-start` (no other rule changed). The bare `<div className="month-switcher">` rendered directly inside `<label className="form-field export-month-field">` in `MonthSwitcher.jsx` was not matched by the original selector. `.month-switcher-wrap` / `.month-activity-info` positioning untouched; `@media (pointer: coarse)` still last. No commit, no other file touched.
+- **Resolution:** Verified live by director: Export Month row now fixed-width at 1280 and 390 (Mono). Lint/build run by director (2 pre-existing errors only; build passes). Status normalized from non-standard DONE by director.
+<!-- ARCH-0023:END -->
+
+<!-- ARCH-0024:START -->
+# [ARCH-0024] Overview Top spending: label/value pills overlapping the bar -> head row above a 16px track (junior-frontend-dev, director; DashboardPage.jsx, index.css)
+
+### [engineering-director-20261022T115638] Overview Top spending: move label/value out of the bar (pill overlap fix)
+- **From:** engineering-director
+- **For:** junior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** User report: category pill overlaps the progress bar. Cause: ARCH-0022 step 4B put the label/value inside the 40px `.ov-hbar` and later gave them card-coloured pill chips (index.css ~3783-3855, DashboardPage.jsx ~580-595). Fix: head row (optional swatch + name left, amount right) ABOVE a 14-16px `.track`-style bar (2px var(--line) border, var(--soft) track, c.color fill with 2px right edge). Remove `.on-fill` logic and the pill rules. Keep classes ov-scoped: `.cat-bar-row*` is shared with CategoryBarList/donut legend, do not reuse or edit those. Visual only; iOS 16px rule stays last.
+- **Resolution:** DashboardPage.jsx Top spending rows now render a head row (swatch + name left, amount right) above a 16px `.ov-hbar-track` bar; `.on-fill` logic and pill rules removed; all new classes are ov-scoped. Lint/build NOT run by junior-frontend-dev (no shell access); director to run.
+
+### [engineering-director-20261022T120100] Verification: Top spending head-row + track bar
+- **From:** engineering-director
+- **For:** all
+- **Status:** RESOLVED
+- **Detail:** Ran `npm run lint` (only the 2 pre-existing react-hooks/set-state-in-effect errors) and `npm run build` (passes). Live Playwright check, user `preview`, Oct 2026 data: Overview Top spending in Dark/Light/Mono at 1280px and 390px. Name and amount sit above a 16px bordered track, with no overlap. The 100% bar (Miscellaneous) and the shortest 5% bar (Shopping) both render with a 2px right edge. Screenshots in .playwright-mcp/topspending-fix/. No `on-fill`/pill rules remain; the iOS 16px rule is still last.
+- **Resolution:** Verified complete; batch archived.
+<!-- ARCH-0024:END -->

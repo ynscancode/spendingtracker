@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../api/client.js'
 import { useCategories } from '../../contexts/categories.js'
+import { useCategoryColor } from '../../hooks/useCategoryColor.js'
 import { ACCOUNTS, ACCOUNT_NAMES } from '../../constants/categories.js'
 import { getModalRoot } from '../../utils/modalRoot.js'
 
@@ -14,6 +15,11 @@ function CategoryColumn({ title, list, listKey, accountId, placeholder, refetch 
   const [removingId, setRemovingId] = useState(null)
   const [rowErrors, setRowErrors] = useState({})
   const inputRef = useRef(null)
+  // Display only: the swatch uses the same palette token as the rest of the UI.
+  // Nothing here reads or writes the stored server colour (there is no colour
+  // input; createCategory sends { name, list, account_id } only).
+  const colorFor = useCategoryColor()
+  const direction = listKey === 'outgoing' ? 'out' : 'in'
 
   function handleDraftChange(value) {
     setDraft(value)
@@ -79,8 +85,7 @@ function CategoryColumn({ title, list, listKey, accountId, placeholder, refetch 
             return (
               <li key={category.id}>
                 <div className="category-manager-row" style={{ opacity: isRemoving ? 0.6 : 1 }}>
-                  <span className="cat-bar-row-label" style={{ textTransform: 'none' }}>
-                    <span className="cat-bar-row-swatch" style={{ background: category.color }} aria-hidden="true" />
+                  <span className="cm-chip" style={{ background: colorFor(accountId, category.name, direction) }}>
                     {category.name}
                   </span>
                   <button
@@ -189,7 +194,7 @@ export default function CategoryManagerModal({ accountId, initialAccountId, onCl
         </div>
 
         {selectable && (
-          <div className="pill-group" style={{ marginBottom: '16px' }}>
+          <div className="pill-group seg-full" style={{ marginBottom: '16px' }}>
             {Object.entries(ACCOUNT_NAMES).map(([id, name]) => (
               <button
                 key={id}

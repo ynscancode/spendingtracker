@@ -79,7 +79,7 @@ export default function ExportModal({ month, activity, onClose }) {
 
         <label className="form-field">
           Scope
-          <div className="pill-group">
+          <div className="pill-group seg-full">
             <button
               type="button"
               className={`pill-btn ${scope === 'month' ? 'active' : ''}`}
@@ -98,7 +98,7 @@ export default function ExportModal({ month, activity, onClose }) {
         </label>
 
         {scope === 'month' && (
-          <label className="form-field" style={{ marginTop: '14px' }}>
+          <label className="form-field export-month-field" style={{ marginTop: '14px' }}>
             Month
             <MonthSwitcher month={pickedMonth} onChange={setPickedMonth} />
           </label>

@@ -62,12 +62,6 @@ file in this setup — the app is fully serverless.
 5. Deploy. Note the resulting backend URL (e.g.
    `https://claudecode-sandbox-server.vercel.app`) — you'll need it in Part 3.
 
-**Optional: LLM-assisted import.** The "Suggest with AI" import feature is
-off unless three more env vars are set on this same backend project:
-`OLLAMA_CLOUD_API_KEY`, `OLLAMA_CLOUD_MODEL`, `OLLAMA_CLOUD_BASE_URL`. Add
-them the same way as the Turso vars above if you want that feature in
-production; leave them unset to keep it disabled.
-
 ---
 
 ## Part 3 — Connect frontend
