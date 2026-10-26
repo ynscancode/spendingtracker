@@ -2280,10 +2280,17 @@ textarea:disabled {
    AddAccount and DeleteAccount modals (all use these two classes). The phone
    bottom-sheet variant is in the <=760px block at the end of the file. */
 .modal-panel {
+  /* Panel padding lives in custom properties so the sticky .modal-head below
+     can reach exactly to the panel's edges (negative margins / top offset)
+     without duplicating magic numbers. The phone sheet overrides them. */
+  --mp-pt: 24px;
+  --mp-pr: 24px;
+  --mp-pb: 24px;
+  --mp-pl: 24px;
   background: var(--card);
   border: 2px solid var(--line);
   border-radius: 22px;
-  padding: 24px;
+  padding: var(--mp-pt) var(--mp-pr) var(--mp-pb) var(--mp-pl);
   width: min(540px, 100%);
   /* Cap the panel at the viewport height minus the overlay's 20px top+bottom
      padding, and let the panel scroll its own content — without this, a
@@ -2300,11 +2307,18 @@ textarea:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
   /* Keep the close button reachable/visible while a tall panel's body
-     scrolls beneath it. */
+     scrolls beneath it. A sticky box sticks at the scroll container's
+     content-box edge (below the panel padding), so the header is stretched
+     over the panel padding with negative margins, given that padding back
+     as its own, and offset by -padding-top: it is then an opaque band
+     covering the full panel width from the very top of the scrollport.
+     The 18px gap to the body is padding (not margin) so content never peeks
+     through right under the title. Unscrolled, layout is unchanged. */
+  margin: calc(-1 * var(--mp-pt)) calc(-1 * var(--mp-pr)) 0 calc(-1 * var(--mp-pl));
+  padding: var(--mp-pt) var(--mp-pr) 18px var(--mp-pl);
   position: sticky;
-  top: 0;
+  top: calc(-1 * var(--mp-pt));
   background: var(--card);
   z-index: 1;
 }
@@ -4264,7 +4278,10 @@ textarea:disabled {
   }
 
   .modal-panel {
-    padding: 16px;
+    --mp-pt: 16px;
+    --mp-pr: 16px;
+    --mp-pb: 16px;
+    --mp-pl: 16px;
     /* Recompute against the mobile overlay's own 20px top+bottom padding
        (unchanged from desktop) - kept explicit here for clarity alongside
        the other mobile modal overrides. */
@@ -4603,7 +4620,8 @@ textarea:disabled {
   /* Modal -> bottom sheet (CSS only; same markup, portal and handlers).
      Overlay anchors the panel to the bottom edge; panel loses its side/bottom
      border and offset shadow, gets 26px top radius, 92% max-height, and a grab
-     handle drawn with ::before. */
+     handle drawn with .modal-head::before (every sheet renders a .modal-head)
+     so it stays in the sticky band instead of scrolling away. */
   .modal-overlay {
     align-items: flex-end;
     padding: 0;
@@ -4617,16 +4635,23 @@ textarea:disabled {
     border-radius: 26px 26px 0 0;
     border-bottom: 0;
     box-shadow: none;
-    padding: 26px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    /* 29px = handle top (12px) + handle (5px) + gap (12px): the band's top
+       padding, so the title sits where it did with the old ::before handle. */
+    --mp-pt: 29px;
+    --mp-pr: max(16px, env(safe-area-inset-right, 0px));
+    --mp-pb: calc(20px + env(safe-area-inset-bottom, 0px));
+    --mp-pl: max(16px, env(safe-area-inset-left, 0px));
     animation: sheetUp 0.25s ease both;
   }
 
-  .modal-panel::before {
+  .modal-head::before {
     content: '';
-    display: block;
+    position: absolute;
+    top: 12px;
+    left: 50%;
     width: 44px;
     height: 5px;
-    margin: -14px auto 12px;
+    transform: translateX(-50%);
     border-radius: 999px;
     background: var(--ink);
   }

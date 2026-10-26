@@ -4828,3 +4828,28 @@ VISUAL-VERIFICATION — PARTIALLY DONE by me via Playwright on the live prod sit
 - **Detail:** Ran `npm run lint` (only the 2 pre-existing react-hooks/set-state-in-effect errors) and `npm run build` (passes). Live Playwright check, user `preview`, Oct 2026 data: Overview Top spending in Dark/Light/Mono at 1280px and 390px. Name and amount sit above a 16px bordered track, with no overlap. The 100% bar (Miscellaneous) and the shortest 5% bar (Shopping) both render with a 2px right edge. Screenshots in .playwright-mcp/topspending-fix/. No `on-fill`/pill rules remain; the iOS 16px rule is still last.
 - **Resolution:** Verified complete; batch archived.
 <!-- ARCH-0024:END -->
+
+<!-- ARCH-0025:START -->
+# [ARCH-0025] Phone bottom-sheet / modal sticky .modal-head left gaps above and beside it when scrolled (index.css .modal-panel padding custom props, .modal-head negative margins + negative top, grab handle moved to .modal-head::before) (senior-frontend-dev, engineering-director)
+
+### [engineering-director-20261026T130922] Batch framing: phone bottom-sheet sticky .modal-head leaves gaps when scrolled
+- **From:** engineering-director
+- **For:** senior-frontend-dev, qa-engineer
+- **Status:** RESOLVED
+- **Detail:** User report: on phone width (<=760px) the Add Transaction bottom sheet scrolls, and the sticky "New transaction" header (`.modal-head`, client/src/index.css ~2299: `position: sticky; top: 0; background: var(--card)`) does not form a solid band — scrolled content (chips, pills, buttons, offset shadows) shows above and beside it. `.modal-panel` (~2282, phone sheet ~4612) is the scroll container and has padding (26px top / 16px sides on phone, 24px desktop) that the header's background doesn't cover. Shared by Transaction/CategoryManager/Export/ClearHistory/AddAccount/DeleteAccount modals and the `.modal-panel.account-sheet`. CSS-only fix in index.css; no commits. Director holds the live Playwright connection and does repro + visual verification (390x600/700, Dark/Light/Mono, plus 1280 desktop). KB in play: KB-0025 (render and look before shipping visual work).
+- **Resolution:** Fixed by senior-frontend-dev-20261026T131500 (index.css only); verified live by engineering-director-20261026T131608. Desktop (1280x600) had the same defect and is fixed too.
+
+### [senior-frontend-dev-20261026T131500] Outcome: modal sticky header now an opaque full-width band
+- **From:** senior-frontend-dev
+- **For:** engineering-director, qa-engineer
+- **Status:** RESOLVED
+- **Detail:** Root cause: sticky sticks at the scroll container's content-box edge, so `.modal-head` stuck below the panel padding, its 18px bottom spacing was margin, and side padding was uncovered. Fix (index.css only): panel padding moved to `--mp-pt/pr/pb/pl` custom props; `.modal-head` uses negative margins + `top: calc(-1*--mp-pt)` + own padding (18px bottom is now padding). Phone sheet: grab handle moved from `.modal-panel::before` to `.modal-head::before` (absolute, top 12px) so it stays in the band; `--mp-pt: 29px`, safe-area insets via `--mp-pr/pl/pb`. All 7 modal users render a .modal-head. Lint: still 2 pre-existing errors; build OK. Check: nested CategoryManager, account sheet, safe-area, amount-field shadow vs band z-index, rounded top corners.
+- **Resolution:** Verified live by engineering-director (see engineering-director-20261026T131608); all requested checks passed, no follow-up needed. (Status normalized from "OPEN (awaiting live visual verification)" to RESOLVED by the director.)
+
+### [engineering-director-20261026T131608] Live visual verification: sticky modal header band
+- **From:** engineering-director
+- **For:** senior-frontend-dev, qa-engineer
+- **Status:** RESOLVED
+- **Detail:** Playwright (live, throwaway preview DB, dummy JWT_SECRET, client VITE_API_URL/VITE_API_TOKEN empty). Screenshots in .playwright-mcp/sheet-gap/. Before: 390x600 Mono scrolled shows Money out/in pills above the header and "Account" label sliced under it; 1280x600 shows Transaction/Transfer tabs above the header. After: 390x600 TransactionModal unscrolled + scrolled in Dark/Light/Mono, plus Light mid-scroll (tomato amount field + shadow pass cleanly under the band) — opaque band from sheet top, handle inside band, rounded corners clean. Account sheet (unscrolled + scrolled, many saved sessions), nested CategoryManagerModal (two-line title, scrolled), Export and ClearHistory sheets at 390x700 (handle present, layout unchanged). Desktop 1280x600 TransactionModal fixed when scrolled. Pixel diff (zlib PNG decode) before vs after, unscrolled: phone 47 px and desktop 40 px differ, all on the inner anti-aliased edge of the rounded top corners; title/close/handle/fields pixel-identical. Lint: same 2 pre-existing set-state-in-effect errors. Build OK (CSS 65.36 kB).
+- **Resolution:** _(informational — no action needed)_
+<!-- ARCH-0025:END -->
