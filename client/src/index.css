@@ -4913,9 +4913,42 @@ textarea:disabled {
 
   .tx .txn-row-read .comment-cell {
     grid-area: 1 / 1 / 2 / 3;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 2px 6px;
     font-size: 15px;
     font-weight: 700;
+  }
+
+  /* Title keeps a readable floor (10ch) even when the IN/OUT badge and a wide
+     amount/balance squeeze the row: the title grows into free space, and in the
+     worst case the badge wraps under it instead of crushing the title to ~0.
+     max-width: max-content caps growth at the text's own width, so a short title
+     neither forces a wrap (line-breaking uses min(10ch, text width)) nor pushes
+     the badge to the far right; long titles still fill the line and ellipsise.
+     Open rows (white-space: normal) are unaffected: max-content is still the
+     unwrapped width, so long titles fill the line and wrap. */
+  .tx .txn-row-read .comment-text,
+  .tx .txn-row-read .comment-fallback {
+    flex: 1 1 10ch;
+    max-width: max-content;
+  }
+
+  /* Open row: show the whole title, wrapped. Badge / amount hug the first line. */
+  .tx .txn-row-read.is-open .comment-cell {
+    align-items: flex-start;
+  }
+
+  .tx .txn-row-read.is-open .comment-text,
+  .tx .txn-row-read.is-open .comment-fallback {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .tx .txn-row-read.is-open .cell-in,
+  .tx .txn-row-read.is-open .cell-out {
+    align-self: start;
   }
 
   .tx .txn-row-read .cat-cell {
