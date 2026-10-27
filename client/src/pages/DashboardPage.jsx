@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pencil } from 'lucide-react'
 import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
@@ -108,14 +108,23 @@ export default function DashboardPage() {
   const month = currentMonthStr()
   const today = todayStr()
 
-  async function loadAll() {
-    setLoading(true)
+  // Latest-request-wins guards (see TransactionsPage): drop a response if a
+  // newer request for the same data has started.
+  const allReqId = useRef(0)
+  const breakdownReqId = useRef(0)
+
+  // `showLoading` is true only for the initial mount load; post-mutation
+  // refreshes update in place so the page isn't blanked and remounted.
+  async function loadAll({ showLoading = false } = {}) {
+    const reqId = ++allReqId.current
+    if (showLoading) setLoading(true)
     const { from, to } = monthRangeFor(month)
     const [accountsData, txns, budgetsRes] = await Promise.all([
       api.getAccounts(),
       api.getTransactions({ from, to }),
       api.getBudgets(month),
     ])
+    if (reqId !== allReqId.current) return
     setAccounts(accountsData)
     setMonthTransactions(txns)
     setBudgets(budgetsRes.budgets)
@@ -123,7 +132,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    loadAll()
+    loadAll({ showLoading: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -133,23 +142,33 @@ export default function DashboardPage() {
   // anything else on the page (Daily insights, Budget card, Top spending,
   // Recent activity, balance cards all stay anchored to the real current
   // month via monthTransactions/month).
+  async function loadBreakdown() {
+    const reqId = ++breakdownReqId.current
+    const { from, to } = monthRangeFor(selectedMonth)
+    const txns = await api.getTransactions({ from, to })
+    if (reqId !== breakdownReqId.current) return
+    setBreakdownTransactions(txns)
+  }
+
   useEffect(() => {
-    async function loadBreakdown() {
-      const { from, to } = monthRangeFor(selectedMonth)
-      const txns = await api.getTransactions({ from, to })
-      setBreakdownTransactions(txns)
-    }
     loadBreakdown()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth])
+
+  // Creating a transaction can change every figure on the page, including the
+  // selected-month breakdown and the month activity indicator.
+  async function refreshAfterMutation() {
+    await Promise.all([loadAll(), loadBreakdown(), activity.refetch()])
+  }
 
   async function handleCreateTransaction(data) {
     await api.createTransaction(data)
-    await loadAll()
+    await refreshAfterMutation()
   }
 
   async function handleCreateTransfer(data) {
     await api.createTransfer(data)
-    await loadAll()
+    await refreshAfterMutation()
   }
 
   function startEditingBudget() {

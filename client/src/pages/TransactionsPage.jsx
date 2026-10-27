@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { api } from '../api/client.js'
 import TransactionList from '../components/transactions/TransactionList.jsx'
 import ThresholdLegend from '../components/transactions/ThresholdLegend.jsx'
@@ -30,11 +30,19 @@ export default function TransactionsPage() {
   const [catManagerOpen, setCatManagerOpen] = useState(false)
   const [clearedMessage, setClearedMessage] = useState(null)
 
+  // Latest-request-wins: a response is dropped if a newer request has started,
+  // so a slow older fetch can't overwrite newer state (month/filter changes,
+  // back-to-back mutations).
+  const txReqId = useRef(0)
+  const acctReqId = useRef(0)
+
   const loadTransactions = useCallback(async () => {
+    const reqId = ++txReqId.current
     setLoading(true)
     const { from, to } = monthRangeFor(month)
     const accountId = accountFilter === 'all' ? undefined : accountFilter
     const data = await api.getTransactions({ from, to, accountId })
+    if (reqId !== txReqId.current) return
     setTransactions(data)
     setLoading(false)
   }, [month, accountFilter])
@@ -43,33 +51,37 @@ export default function TransactionsPage() {
     loadTransactions()
   }, [loadTransactions])
 
-  useEffect(() => {
-    api.getAccounts().then(setAccounts)
+  const refreshAccounts = useCallback(async () => {
+    const reqId = ++acctReqId.current
+    const data = await api.getAccounts()
+    if (reqId !== acctReqId.current) return
+    setAccounts(data)
   }, [])
 
-  function refreshAccounts() {
-    api.getAccounts().then(setAccounts)
+  useEffect(() => {
+    refreshAccounts()
+  }, [refreshAccounts])
+
+  // Every balance-affecting mutation (create, transfer, edit, delete, clear)
+  // refreshes the list, the account balances and the activity indicator together.
+  async function refreshAfterMutation() {
+    await Promise.all([loadTransactions(), refreshAccounts(), activity.refetch()])
   }
 
   async function handleCreateTransaction(data) {
     await api.createTransaction(data)
-    await loadTransactions()
-    refreshAccounts()
-    activity.refetch()
+    await refreshAfterMutation()
   }
 
   async function handleCreateTransfer(data) {
     await api.createTransfer(data)
-    await loadTransactions()
-    refreshAccounts()
-    activity.refetch()
+    await refreshAfterMutation()
   }
 
   async function handleSaveEdit(id, data) {
     await api.updateTransaction(id, data)
     setEditingId(null)
-    await loadTransactions()
-    activity.refetch()
+    await refreshAfterMutation()
   }
 
   async function handleDelete(txn) {
@@ -78,9 +90,7 @@ export default function TransactionsPage() {
       : 'Delete this transaction?'
     if (!window.confirm(confirmMsg)) return
     await api.deleteTransaction(txn.id)
-    await loadTransactions()
-    refreshAccounts()
-    activity.refetch()
+    await refreshAfterMutation()
   }
 
   function openModal(mode) {
@@ -90,9 +100,7 @@ export default function TransactionsPage() {
 
   async function handleCleared() {
     setClearOpen(false)
-    await loadTransactions()
-    refreshAccounts()
-    activity.refetch()
+    await refreshAfterMutation()
     setClearedMessage('All transaction history has been deleted.')
   }
 
