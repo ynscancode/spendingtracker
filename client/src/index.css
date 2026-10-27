@@ -4895,7 +4895,13 @@ textarea:disabled {
 
   /* Read row: [category][account ......][amount] on 2 lines + actions line. */
   .tx .txn-row-read {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    /* Col 1 (category) may shrink to 0 and ellipsise; col 2 (account) never
+       drops below its own text; col 3 (amount / balance) is always its full
+       max-content. Col 3 must not be `auto`: `.tx td { min-width: 0 }` gives
+       its items a 0 minimum contribution, so an `auto` track starts at 0 and
+       splits leftover space with col 1, clipping the amount. On a 320px card
+       only the category yields, so nothing spills under or past the amount. */
+    grid-template-columns: minmax(0, auto) minmax(max-content, 1fr) max-content;
     column-gap: 6px;
     row-gap: 2px;
     min-height: 0;
@@ -4913,6 +4919,9 @@ textarea:disabled {
 
   .tx .txn-row-read .comment-cell {
     grid-area: 1 / 1 / 2 / 3;
+    /* Spans cols 1-2: contribute no intrinsic width, so the nowrap title can't
+       inflate col 2 (whose minimum is max-content). Width comes from the area. */
+    contain: inline-size;
     flex-wrap: wrap;
     gap: 2px 6px;
     font-size: 15px;
@@ -4953,6 +4962,8 @@ textarea:disabled {
 
   .tx .txn-row-read .cat-cell {
     grid-area: 2 / 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .tx .txn-row-read .account-name-cell {
@@ -4998,6 +5009,7 @@ textarea:disabled {
 
   /* Category chip becomes plain muted text; the badge carries the colour. */
   .tx .txn-row-read .category-cell {
+    display: block;
     padding: 0;
     border: 0;
     border-radius: 0;
