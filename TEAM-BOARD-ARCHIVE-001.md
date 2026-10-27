@@ -4878,3 +4878,49 @@ VISUAL-VERIFICATION — PARTIALLY DONE by me via Playwright on the live prod sit
 - **Detail:** PASS (code + gates). Lint = exactly the 2 pre-existing set-state-in-effect errors, 0 warnings; build OK. Diff audit: all mutations (create/transfer/edit/delete/clear) on both pages now refresh txns+accounts+activity; Dashboard refresh reloads selectedMonth breakdown and does not toggle `loading`. Request-id guards cannot leave `loading` stuck except when the newer request throws (pre-existing, no try/catch). StrictMode double-mount OK. No other balance-affecting mutation paths outside the two pages. Residual (non-blocking) notes: (a) refetch failure after a successful mutation now surfaces as a modal/EditRow error (handleSaveEdit already did setEditingId(null) so EditRow error may be unseen); (b) loadBreakdown/loadTransactions close over month at render time, so a month change during an in-flight create could let a stale-month response win; (c) Transactions page still flips `loading` on post-mutation refresh (list flashes placeholder; pre-existing). Visual check left to director.
 - **Resolution:** Visual check done by engineering-director (PASS); residuals (a)-(c) accepted as non-blocking and reported to the caller.
 <!-- ARCH-0026:END -->
+
+<!-- ARCH-0027:START -->
+# [ARCH-0027] Phone transaction card title truncated / full title on tap-open (senior-frontend-dev, engineering-director; client/src/index.css, TransactionRow.jsx)
+
+### [engineering-director-20261027T063832] Phone transaction card: long title truncated, must show in full when row is open
+- **From:** engineering-director
+- **For:** senior-frontend-dev, qa-engineer
+- **Status:** RESOLVED
+- **Detail:**
+  - User report: on mobile (<=760px) the transaction title (`txn.comment`, `.comment-text` in `client/src/components/transactions/TransactionRow.jsx` ReadRow) is cut off; when the row is tapped open (`.txn-row-read.is-open`) the full title must show (wrapped).
+  - Director repro (Playwright, preview DB, 390px and 320px): open state still ellipsises ("Dinner with the whole ..."). Collapsed state: `.comment-text` (base rule `client/src/index.css` ~1830: `min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis`) is the ONLY shrinkable item on card row 1 — the IN/OUT `.transfer-label` is `flex:none`, and grid col 3 (`auto`) is sized by the widest of amount (row 1) and `bal $NNNNN.NN` (row 2) — so with transfers and 5-digit balances the title gets squeezed toward 0px ("Moving the a..." at 390px, "Mont..." at 320px). That is the "completely cut off" mechanism. Also seen at 320px: `.account-name-cell` text ("Spending") overlaps the balance in row 2.
+  - Desktop (>760px) must be unchanged; keep role=row/cell + aria-expanded toggle semantics.
+- **Resolution:** Fixed in commit 129b5b8 (client/src/index.css, phone @media block only): open row wraps the full title (overflow-wrap:anywhere); collapsed title has `flex: 1 1 10ch; max-width: max-content` with flex-wrap on the cell, so the IN/OUT badge wraps beneath only at the narrowest widths. First pass (fixed 10ch basis) failed director check — short "Rent"+badge wrapped and badge was pushed right — fixed by the max-content cap. Verified in Playwright at 390/320px collapsed/open/re-collapsed and 1280px desktop. Pre-existing 320px account-name/balance overlap left out of scope.
+
+---
+
+### [senior-frontend-dev-20261027T064003] Phone txn card: open-row full title + collapsed title floor (CSS only)
+- **From:** senior-frontend-dev
+- **For:** engineering-director, qa-engineer
+- **Status:** RESOLVED
+- **Detail:**
+  - `client/src/index.css`, inside `@media (max-width: 760px)` under `.tx` only (desktop untouched, no JSX change). Open row (`.is-open`): `.comment-text`/`.comment-fallback` get `white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere`; comment cell `align-items:flex-start`, `.cell-in/.cell-out` `align-self:start`.
+  - Collapsed: comment cell `flex-wrap:wrap`, title/fallback `flex:1 1 10ch` so the title keeps a >=10ch ellipsised floor; worst case the IN/OUT badge wraps under it. Side effect: badge now sits at the right end of the title area (title grows).
+  - Lint: 2 pre-existing errors (DashboardPage.jsx, TransactionsPage.jsx set-state-in-effect), none from CSS. Build OK. Not committed. 320px account-name overlap not addressed.
+- **Resolution:** CSS edit complete; awaiting visual check.
+
+---
+
+### [senior-frontend-dev-20261027T064004] Visual-verification request: phone transaction card title
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:**
+  - Route /transactions at 390, 340, 320px, plus 800px for desktop regression. Check: (1) collapsed long title with transfer IN/OUT + 5-digit balance: title shows >=~10 chars + ellipsis, badge on same line or wrapped below, nothing overlaps amount; (2) tap row: full title wraps, incl. unbroken `Supercalifragilisticexpialidociousgroceryrunthatneverends_receipt#4471`; badge and amount align to first line; row grows and Edit/Delete line sits below; (3) tap again collapses (toggle covers taller row); (4) no-comment row (category fallback) open/collapsed; (5) short-title row with badge: badge position acceptable; (6) all three themes.
+- **Resolution:** Director verified live (Playwright) after the max-content follow-up: (1)-(5) pass at 390 and 320px; desktop 1280px table unchanged vs pre-change baseline; diff hunks confirmed inside the 760px @media block. (6) themes not screenshotted — the change adds no colour properties, so it is theme-agnostic.
+
+---
+
+### [senior-frontend-dev-20261027T065500] Phone txn title: cap growth at max-content (follow-up to -064003)
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:**
+  - Added `max-width: max-content` to `.tx .txn-row-read .comment-text, .comment-fallback` (phone block, `client/src/index.css`). Fixes short-title badge wrapping at 320px and badge being pushed far right. Open state and empty `.comment-text` (display:none) need no extra handling. Build OK; lint still 2 pre-existing errors. Not committed. Needs your browser re-verify (-064004 left OPEN).
+- **Resolution:** CSS edit complete; awaiting director re-verification.
+<!-- ARCH-0027:END -->
