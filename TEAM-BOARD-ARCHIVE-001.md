@@ -4924,3 +4924,48 @@ VISUAL-VERIFICATION — PARTIALLY DONE by me via Playwright on the live prod sit
   - Added `max-width: max-content` to `.tx .txn-row-read .comment-text, .comment-fallback` (phone block, `client/src/index.css`). Fixes short-title badge wrapping at 320px and badge being pushed far right. Open state and empty `.comment-text` (display:none) need no extra handling. Build OK; lint still 2 pre-existing errors. Not committed. Needs your browser re-verify (-064004 left OPEN).
 - **Resolution:** CSS edit complete; awaiting director re-verification.
 <!-- ARCH-0027:END -->
+
+<!-- ARCH-0028:START -->
+# [ARCH-0028] Phone card row 2: account name overlapping balance at 320px; grid track fixes (senior-frontend-dev x3, engineering-director; client/src/index.css)
+
+Follow-up to [ARCH-0027].
+
+### [engineering-director-20261027T092516] Phone card row 2: account name overlaps balance at 320px
+- **From:** engineering-director
+- **For:** senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:**
+  - User follow-up: fix the pre-existing overlap flagged in [ARCH-0027]. On <=760px cards (client/src/index.css phone block, ~4897 `.tx .txn-row-read { grid-template-columns: auto minmax(0,1fr) auto }`), row 2 = `.cat-cell` (grid-area 2/1, col 1 `auto`) + `.account-name-cell` (2/2, col 2 `minmax(0,1fr)`, `::before '· '`) + `.balance-cell` (2/3, col 3 `auto`, `::before 'bal '`).
+  - Director repro at 320px (Playwright, preview DB): "Transfer-Out · Spending" runs under "bal $23500.76"; "Subscriptions · Spending" runs under "bal ($1299.99)". Col 2 collapses to ~0 and the account text overflows into col 3. At 390px no overlap.
+  - Must not regress the 129b5b8 title fix (row 1) or desktop (>760px).
+- **Resolution:** Fixed in commit 4182c66 (client/src/index.css, phone @media block only) after three senior-frontend-dev passes, each director-verified in Playwright: pass 1 (col 2 minmax(max-content,1fr)) fixed the overlap but blew out long-title cards (spanning .comment-cell inflated col 2); pass 2 (contain: inline-size on .comment-cell) fixed that but clipped row-1 amounts; pass 3 (col 3 max-content, because .tx td {min-width:0} let an auto col 3 start at 0) passed. Final: 320px no overlap/blowout/clipping, account name intact, category ellipsises (e.g. 'Tr…', 'Su…' on the widest-amount rows); 390px matches prior layout; 129b5b8 title behaviour intact (Rent badge inline, long titles ellipsised collapsed / full when open); desktop 1280px unchanged.
+
+### [senior-frontend-dev-20261027T092642] Phone card row 2 overlap at 320px: CSS fix applied, needs visual check
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:**
+  - Fix in client/src/index.css phone block only: row grid is now `minmax(0, auto) minmax(max-content, 1fr) auto`; `.cat-cell` gets `min-width:0; overflow:hidden`; `.category-cell` gets `display:block` so its existing nowrap/ellipsis applies. Account name never shrinks (keeps Spending vs Savings legible); category ellipsises first. No JSX change, desktop untouched. Build passes; lint unchanged at 2 pre-existing errors.
+  - Please verify visually (no browser available to me): (1) 320px: "Transfer-Out · Spending" and "Subscriptions · Spending" with balances "bal $23500.76", "bal ($1299.99)", "bal ($12345.67)": no overlap, category ellipsised, no horizontal card overflow. (2) 390px and 360px: unchanged, full category shown. (3) Row 1: short title "Rent" keeps IN/OUT badge inline; long title ellipsises collapsed and shows in full when is-open. (4) Open row actions line (row 3) intact. (5) Desktop >760px unchanged. (6) Mono/Light themes spot check.
+- **Resolution:** Director-verified: overlap fixed but long-title cards blew out at 320px; superseded by -094500 and -101500. Final result verified, see director entry -092516.
+
+### [senior-frontend-dev-20261027T094500] Phone card 320px blowout: contain:inline-size on row-1 comment cell
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:**
+  - Confirmed cause: col 2 min is max-content, so the col 1-2 spanning `.comment-cell` (nowrap title) was counted by the spanning-item step. Added `contain: inline-size` to `.tx .txn-row-read .comment-cell` (phone block only). Intrinsic width 0; real width from its grid area (stretch), so 129b5b8 flex-wrap/10ch floor/max-content cap unchanged. Only other row-1 item is the amount in col 3 (not spanning); cat/account cells are single-column.
+  - Support: Chrome 105+, Safari 15.4+, Firefox 101+; acceptable for a phone layout. Build passes; lint 2 pre-existing errors.
+  - Needs re-verify at 320px: no blowout, titles ellipsise, amount/bal visible, category ellipsises before account, Rent badge inline, open row full title.
+- **Resolution:** Director-verified: blowout fixed; row-1 amounts then clipped at 320px; superseded by -101500.
+
+### [senior-frontend-dev-20261027T101500] Phone card row-1 amount clipped at 320px: col 3 now max-content
+- **From:** senior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:**
+  - Cause (refines the diagnosis): `.tx td { min-width: 0 }` gives col-3 items a 0 minimum contribution, so an `auto` col 3 starts at 0 (not at min-content) and shares leftover space with col 1 (`minmax(0, auto)`) in maximize-tracks; it never reaches the amount's max-content. The amount cell is nowrap with an inline-flex fixed 14px dot slot + no-break AccountingValue, so its min- and max-content are effectively equal; the min-width:0 is the real culprit.
+  - Fix (phone block only): `grid-template-columns: minmax(0, auto) minmax(max-content, 1fr) max-content;` plus updated comment. Neither amount nor balance spans columns. No JSX. Build passes; lint = 2 pre-existing errors.
+  - Needs re-verify at 320px: "($100.00)", "($12000.00)", "($1299.99)" with dot fully visible; balances flush right; category still ellipsises; no overlap/blowout.
+- **Resolution:** Director-verified PASS at 320px (amounts incl. dot shown in full, balances flush right, category ellipsises, no overlap/blowout, open rows show full title), 390px and 1280px desktop. Committed as 4182c66.
+<!-- ARCH-0028:END -->
