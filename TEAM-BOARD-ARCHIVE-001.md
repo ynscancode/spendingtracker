@@ -5001,3 +5001,49 @@ Follow-up to [ARCH-0027].
 - **Detail:** Node ESM script (38 assertions, all PASS) imported the real dayTotals.js/categoryFilter.js and compared against HEAD dayTotals: nothing-hidden output deep-equals old computeDayTotals; with last-row-of-account hidden, a whole account hidden, transfer hidden, all hidden, perAccount structure/end-of-day balances are identical to unfiltered while In/Out use visible non-transfer rows only. categoryFilter helpers verified (case/whitespace, string/number account ids, same name across accounts and out/in, null category -> Uncategorized, orphan-in-rows options, transfer key, Show all retains other-account keys). `npm run build` passes; lint shows only the 2 pre-existing set-state-in-effect errors. index.css: changes are additions only, coarse-pointer block still last, no `.tx` grid edits. Minor notes: (1) noteIfHidden reads hiddenKeys from the closure captured before the awaited mutation, so a filter change during the request can give a stale banner decision; (2) editing a row's date out of the current month with its category hidden shows "hidden by your category filter" though it left the range; (3) Reset clears the whole set (including other-account keys) while count/Show all are scoped. Visual verification still needed for focus trap/return, dialog layout, swatch rendering.
 - **Resolution:** Director triage: notes (1) stale-closure banner during an in-flight request and (2) date-moved-out-of-month banner wording accepted as minor, reported to requester, not fixed; (3) documented in CLAUDE.md. Live UI items verified by director.
 <!-- ARCH-0029:END -->
+
+<!-- ARCH-0030:START -->
+# [ARCH-0030] Dashboard daily spending chart capped scale + broken outlier bars (dailyScale.js, DashboardPage.jsx, index.css) — senior-frontend-dev x2, junior-frontend-dev, qa-engineer, technical-writer
+
+### [engineering-director-20261119T063517] Batch framing: Dashboard daily spending chart capped scale with broken outlier bars
+- **From:** engineering-director
+- **For:** all
+- **Status:** RESOLVED
+- **Detail:** User-approved spec (Option A) for `client/src/pages/DashboardPage.jsx` daily bars (~L305-322 scale, ~L681-731 markup): median of non-zero day totals; outlier = total > 3x median (named constant); <4 non-zero days -> no clipping; with outliers, ceiling = max(largest non-outlier, dailyBudget if set) x 1.15; no outliers -> maxDay byte-identical to today. Clipped bars full height with zigzag break mark + tomato tip, compact amount label above the break (desktop yes; phone only if it fits cleanly, else hidden <=760px). Tooltip unchanged + "off the scale" hint. Pure helper in client/src/utils/. Routing: senior-frontend-dev -> qa-engineer + technical-writer (parallel) -> director live visual verification -> separate commit. Skipped: product-owner/ui-ux (spec user-approved and visually specified), tech-lead (single-component change), security/devops (no surface). Constraints: ARCH-0015 removed `overflow-x: clip` from `.bar-chart` in favour of edge-anchored tooltips — labels must stay inside chart edges the same way and must not reintroduce clip. HEAD baseline captured: July 2026 (no outliers) `.ov-daily` 1280 Mono md5 573a1baf749f7d2261786ba9cb473ef3 — any label-space reservation must apply only when bars are clipped. Preview user `chartuser` seeded: Sep (one $2000), Aug (adjacent $2000/$1500 on 14/15), Jul (no outliers), Jun (3 spend days), Apr (edge outliers day 1 $2100, days 29 $1800 / 30 $950).
+- **Resolution:** Shipped in commit 94a130a. Director live-verified (Playwright, throwaway preview DB, user chartuser): Sep single $2000 outlier ($2k label, cut, tooltip real total + 'Off the scale' line), Aug adjacent 14/15 (both cut, labels suppressed), Apr edges (day-1 '$2.1k' anchored inside left edge; 29/30 suppressed), Jun <4 days (linear, no cut), no-budget (sky body + tomato tip, top normal bar at ~87%); 1280 Light/Dark/Mono, 390 Dark, 320 Light. No-outlier July render byte-identical to HEAD (settled element screenshots both md5 cf92838c93b29637ebfc9f4aff307642; HEAD measured by temporary checkout with verified backup/restore). Two director-requested revisions: chevron break did not read as a cut (invisible on 6px phone bars) -> slanted full-border-box band; hover tooltip overlapped the label -> label hidden on its bar's hover. Phone label decision: shown on phones unless another clipped bar is within 4 days (1 day on all viewports); verified clean at 390/320. Lint (only 2 pre-existing errors) + build run by director.
+
+### [senior-frontend-dev-20261119T063801] Daily spending chart capped scale implemented
+- **From:** senior-frontend-dev
+- **For:** qa-engineer, technical-writer, engineering-director
+- **Status:** RESOLVED
+- **Detail:** Added pure helper client/src/utils/dailyScale.js (computeDailyScale, formatCompactAmount; constants OUTLIER_MULTIPLE=3, MIN_SAMPLE_DAYS=4, CEILING_HEADROOM=1.15). DashboardPage consumes it; clipped bars render at 100% height with a zigzag break (.bar-chart-gap/.bar-chart-tip), compact ink label above, tooltip gains an "Off the scale" line. All new layout (extra margin-top 34px, label, break spans) is gated on .bar-chart--clipped / clipped bars only; no-outlier and <4-day charts keep identical DOM/CSS. Phone label rule: shown unless another clipped bar is within 4 days (phones) or 1 day (all viewports); first/last two bars anchor inward; no overflow clip added. Edge case: an outlier is only clipped if it exceeds the ceiling (huge budget falls back to legacy linear). Lint: only the 2 pre-existing errors; build OK. Needs visual check at 1280/390/320, 3 themes, Sep/Aug/Apr seeds.
+- **Resolution:** Implemented; pending QA and director visual verification.
+
+### [technical-writer-20261119T065000] CLAUDE.md documents the capped daily bar scale
+- **From:** technical-writer
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Added one sub-bullet under Dashboard > Monthly insights in CLAUDE.md, verified against utils/dailyScale.js, DashboardPage.jsx and index.css: scale rule and constants, clip-only-if-above-ceiling edge case, no-outlier identical render gated on .bar-chart--clipped, break/tip/label rendering and compact formatter, label suppression (1 day all / 4 days phone), edge anchoring, no overflow clip, tooltip off-scale line. No other sections touched; nothing committed.
+- **Resolution:** Docs match the uncommitted code; re-check if QA/visual verification changes the label rules.
+
+### [qa-engineer-20261119T064900] QA of capped-scale daily chart (dailyScale.js, DashboardPage, index.css)
+- **From:** qa-engineer
+- **For:** engineering-director, senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Code audit + executable checks PASS, no defects. Own node script (scratchpad qa-scale.mjs) covered spec cases: 1x$2000 outlier (median 80, threshold 240, ceiling 138, normal bars 22/29/36/43/51/58/65/72/80/87%, budgetPct 72.46), adjacent outliers, even median, exactly 4 / 3 non-zero days, no-outlier legacy formula identical with/without budget, no-budget outliers, budget above non-outliers, huge-budget fallback, all-zero, strict > at exactly 3x, compact formatter edges (all correct). 3 initial script FAILs were my own hand-arithmetic errors, helper verified correct. Lint: only the 2 pre-existing set-state-in-effect errors; build OK. CSS: all new rules gated on clipped markup/.bar-chart--clipped, no overflow clip, coarse-pointer block still last, no gradient/blur/tomato text. Non-clipped DOM identical to HEAD (false child renders nothing, same className string). Needs director visual check: .bar-chart-gap spans only the padding box so the bar's 2px side borders may show through the break band; tooltip hint only visible on hover (pre-existing tooltip behaviour, DOM-present for SR).
+- **Resolution:** Verified; remaining item is the director's live visual check.
+
+### [senior-frontend-dev-20261119T071500] Capped-scale break mark revised (slanted ink-outlined band)
+- **From:** senior-frontend-dev
+- **For:** engineering-director, qa-engineer
+- **Status:** RESOLVED
+- **Detail:** CSS-only revision in client/src/index.css (no JSX/helper change). `.bar-chart-gap` is now a slanted parallelogram band positioned `left/right: calc(-1 * var(--bw))` so it cuts across the full border box (side borders severed); `--bw`/`--br` set on `.bar-chart--clipped .bar-chart-bar` (2px/6px, 1.5px/3px in the <=760px block). Band: top 6px, outer ink (`var(--line)`) polygon 8px tall at left to 12px at right, `::after` card-coloured inner (4px visible, 2px ink edges). `.bar-chart-tip` is tomato, 12px tall, keeps top radius (br-bw), sits under the gap (z-index 1). All gated on clipped bars. Lint: only the 2 pre-existing errors; build OK. Needs director live re-check at 1280/390/320 x Dark/Light/Mono, plus no-outlier md5 diff.
+- **Resolution:** Director live-verified the cut at 1280 Light/Mono/Dark, 390 Dark, 320 Light; no-outlier render byte-identical to HEAD. Committed in 94a130a.
+
+### [junior-frontend-dev-20261119T072000] Clipped-bar label hidden while its tooltip is open
+- **From:** junior-frontend-dev
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** CSS-only fix in client/src/index.css, lines 4358-4363 (inside the Capped-scale block, after `.ov .bar-chart-clip-label--right`): added `.ov .bar-chart-bar-wrap:hover .bar-chart-clip-label { visibility: hidden; }` with a one-line comment. Mirrors the tooltip reveal (`.bar-chart-bar-wrap:hover`, line 1191; no :focus/:focus-within variants exist for the tooltip). No JSX, helper, or other rule changed; coarse-pointer block still last. Lint and build NOT run: junior-frontend-dev had no shell tool in this run.
+- **Resolution:** Director ran lint (only the 2 pre-existing errors) and build (OK) and live-verified the label hides on hover at 1280 Dark. Committed in 94a130a.
+<!-- ARCH-0030:END -->
