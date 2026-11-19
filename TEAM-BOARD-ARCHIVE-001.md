@@ -4969,3 +4969,35 @@ Follow-up to [ARCH-0027].
   - Needs re-verify at 320px: "($100.00)", "($12000.00)", "($1299.99)" with dot fully visible; balances flush right; category still ellipsises; no overlap/blowout.
 - **Resolution:** Director-verified PASS at 320px (amounts incl. dot shown in full, balances flush right, category ellipsises, no overlap/blowout, open rows show full title), 390px and 1280px desktop. Committed as 4182c66.
 <!-- ARCH-0028:END -->
+
+<!-- ARCH-0029:START -->
+# [ARCH-0029] Transactions page category checkbox filter (CategoryFilter.jsx, categoryFilter.js, dayTotals.js balance invariant) — ui-ux-designer, senior-frontend-dev, qa-engineer, technical-writer
+
+### [engineering-director-20261119T061852] Batch framing: Transactions page category filter (checkbox multi-select)
+- **From:** engineering-director
+- **For:** all
+- **Status:** RESOLVED
+- **Detail:** User request: "add a checkbox that can filter out transactions by transaction category" on `client/src/pages/TransactionsPage.jsx`. Client-only (filter the already-fetched list; no API change). Routing: ui-ux-designer (spec) -> senior-frontend-dev (implement) -> qa-engineer + technical-writer (parallel) -> director visual verification (Playwright live in this session) -> commit + archive. Skipped: product-owner (caller supplied acceptance defaults), tech-lead (frontend-only, no new deps/data flow), security-engineer (no new input crosses the trust boundary), devops. Load-bearing invariant: `running_balance` is server-computed over ALL rows; day In/Out totals must use visible rows only, but end-of-day balances must come from the FULL day's rows (computeDayTotals currently takes the last row seen per account — feeding it a filtered list would show wrong balances). Prior history: ARCH-0026 (refreshAfterMutation in TransactionsPage must keep working), ARCH-0007 (day money-in excludes transfers), ARCH-0027/0028 (phone card grid tracks; don't regress).
+- **Resolution:** Shipped in commit 08a1d0a. Director live-verified via Playwright on a throwaway preview DB (1280 Light/Dark/Mono, 390 Dark sheet, 320 Dark): hidden last-row-of-day keeps true end-of-day balance, all-of-account-hidden keeps per-account sub-row with true balance, same-name out/in disambiguated, Account-scoped N of M, Hide all -> filtered-empty, Show all categories resets + refocuses trigger, Done/Close return focus, create-into-hidden-category banner + balance refresh. Escape/Tab-trap not driveable with available tools (code-reviewed by QA only). Pre-existing, unrelated: after an in-app login the app ignored clicks until a full reload (reproduced identically on HEAD code).
+
+### [senior-frontend-dev-20261119T062521] Category filter implemented on Transactions page (client-only)
+- **From:** senior-frontend-dev
+- **For:** qa-engineer, technical-writer, engineering-director
+- **Status:** RESOLVED
+- **Detail:** New CategoryFilter.jsx (trigger/Reset/portaled dialog) + categoryFilter.js (keys, option groups). Hidden-key Set lives in TransactionsPage. TransactionList groups the FULL list and passes per-day {all, visible}; computeDayTotals(allTxns, visibleTxns) derives balances/per-account structure from all rows and In/Out from visible rows only; empty days/months/years pruned; filtered-empty state added. Banner slot generalized to {text, action, hiddenByFilter}. refreshAfterMutation untouched. Build passes; lint has 2 pre-existing set-state-in-effect errors (DashboardPage:135, TransactionsPage:58), identical before my change. Visual verification request: /transactions at 1280 and 390/320px, 3 themes: open dialog, tick/untick, Show all/Hide all, active trigger state, filtered-empty card, a day with a hidden later row (balances unchanged), edit row while filtered, create hidden-category txn banner.
+- **Resolution:** Director visual verification passed (see engineering-director-20261119T061852). Normalized from freeform DONE status by director.
+
+### [technical-writer-20261119T064500] Documented Transactions-page category filter in CLAUDE.md
+- **From:** technical-writer
+- **For:** engineering-director
+- **Status:** RESOLVED
+- **Detail:** Added one "Category filter" bullet (3 sub-bullets) under "Transactions list" in `C:\spendingtracker\CLAUDE.md`, verified against CategoryFilter.jsx, categoryFilter.js, TransactionsPage.jsx, TransactionList.jsx, DayGroup.jsx, dayTotals.js. Covers placement, hidden-key Set semantics, key format, balance invariant (computeDayTotals(all, visible)), pruning/empty states, editing exemption, hiddenByFilter banner. No other sections changed; nothing else was contradicted. Not committed. CSS class names not re-verified in index.css beyond those referenced in JSX.
+- **Resolution:** _(informational — no action needed)_ Director corrected two details (empty state is a message not a card; Reset/Show all categories clear both accounts' keys) before commit 08a1d0a.
+
+### [qa-engineer-20261119T064500] QA audit: Transactions category filter (logic/code + pure-function checks)
+- **From:** qa-engineer
+- **For:** engineering-director, senior-frontend-dev
+- **Status:** RESOLVED
+- **Detail:** Node ESM script (38 assertions, all PASS) imported the real dayTotals.js/categoryFilter.js and compared against HEAD dayTotals: nothing-hidden output deep-equals old computeDayTotals; with last-row-of-account hidden, a whole account hidden, transfer hidden, all hidden, perAccount structure/end-of-day balances are identical to unfiltered while In/Out use visible non-transfer rows only. categoryFilter helpers verified (case/whitespace, string/number account ids, same name across accounts and out/in, null category -> Uncategorized, orphan-in-rows options, transfer key, Show all retains other-account keys). `npm run build` passes; lint shows only the 2 pre-existing set-state-in-effect errors. index.css: changes are additions only, coarse-pointer block still last, no `.tx` grid edits. Minor notes: (1) noteIfHidden reads hiddenKeys from the closure captured before the awaited mutation, so a filter change during the request can give a stale banner decision; (2) editing a row's date out of the current month with its category hidden shows "hidden by your category filter" though it left the range; (3) Reset clears the whole set (including other-account keys) while count/Show all are scoped. Visual verification still needed for focus trap/return, dialog layout, swatch rendering.
+- **Resolution:** Director triage: notes (1) stale-closure banner during an in-flight request and (2) date-moved-out-of-month banner wording accepted as minor, reported to requester, not fixed; (3) documented in CLAUDE.md. Live UI items verified by director.
+<!-- ARCH-0029:END -->
