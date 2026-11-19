@@ -4,6 +4,7 @@ import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
 import { formatCurrency, formatSigned, formatOutflow } from '../utils/format.js'
 import { computeDailyInsights } from '../utils/insights.js'
+import { computeDailyScale, formatCompactAmount } from '../utils/dailyScale.js'
 import { ACCOUNTS } from '../constants/categories.js'
 import { useDailyBudget } from '../hooks/useDailyBudget.js'
 import { useCategories } from '../contexts/categories.js'
@@ -306,20 +307,35 @@ export default function DashboardPage() {
   // When no daily budget is set, scale off actual max spend only — no
   // budget reference line to draw, and no "over" coloring since
   // there's nothing to exceed.
-  const maxDay = hasDailyBudget
-    ? Math.max(1, dailyBudget, ...Object.values(dayMap))
-    : Math.max(1, ...Object.values(dayMap))
+  // With outlier days (see utils/dailyScale.js) the scale is capped and the
+  // outlier bars are drawn full height with a break mark; otherwise maxDay is
+  // exactly the linear value described above.
+  const dailyScale = computeDailyScale(dayMap, hasDailyBudget ? dailyBudget : null)
+  const maxDay = dailyScale.maxDay
   const budgetPct = hasDailyBudget ? (dailyBudget / maxDay) * 100 : null
   const todayDayNumber = selectedMonth === month ? Number(today.slice(8, 10)) : null
+  const clippedDays = Array.from({ length: totalDays }, (_, i) => i + 1).filter((d) => dailyScale.clipped[d])
   const dailyBars = Array.from({ length: totalDays }, (_, i) => {
     const v = dayMap[i + 1] || 0
-    const h = Math.max(2, Math.round((v / maxDay) * 100))
+    const isClipped = !!dailyScale.clipped[i + 1]
+    const h = isClipped ? 100 : Math.max(2, Math.round((v / maxDay) * 100))
     const over = hasDailyBudget && v > dailyBudget
     // Bar tone: over the daily budget = tomato, today (current month only) =
     // lime, any other spend day = sky, no spend = flat soft stub.
     const tone = v === 0 ? 'empty' : over ? 'over' : (i + 1 === todayDayNumber ? 'today' : 'default')
-    return { height: h, tone, total: v, biggest: dayBiggestMap[i + 1] || null, day: i + 1 }
+    // Label crowding: a compact label is ~3 bars wide at 390px, so another
+    // clipped bar within 1 day collides everywhere and within 4 days on phones.
+    const nearest = isClipped
+      ? Math.min(...clippedDays.filter((d) => d !== i + 1).map((d) => Math.abs(d - (i + 1))), Infinity)
+      : Infinity
+    return {
+      height: h, tone, total: v, biggest: dayBiggestMap[i + 1] || null, day: i + 1,
+      clipped: isClipped,
+      labelText: isClipped ? formatCompactAmount(v) : '',
+      labelCrowd: nearest <= 1 ? 'all' : nearest <= 4 ? 'phone' : null,
+    }
   })
+  const hasClipped = clippedDays.length > 0
 
   // Budget summary is Spending-only — budgeting doesn't apply to Savings.
   // The budgets array now always contains every Spending outgoing category
@@ -685,7 +701,7 @@ export default function DashboardPage() {
               {hasDailyBudget ? `Budget ${formatCurrency(dailyBudget)}/day` : 'No daily budget'}
             </span>
           </div>
-          <div className="bar-chart">
+          <div className={hasClipped ? 'bar-chart bar-chart--clipped' : 'bar-chart'}>
             {hasDailyBudget && (
               <div className="budget-line" style={{ bottom: `${Math.min(98, budgetPct)}%` }} />
             )}
@@ -708,10 +724,32 @@ export default function DashboardPage() {
                 <div
                   className={`bar-chart-bar bar-chart-bar--${bar.tone}`}
                   style={{ height: `${bar.height}%` }}
-                />
+                >
+                  {bar.clipped && (
+                    <>
+                      <span className="bar-chart-gap" aria-hidden="true" />
+                      <span className="bar-chart-tip" aria-hidden="true" />
+                    </>
+                  )}
+                </div>
+                {bar.clipped && bar.labelText && (
+                  <span
+                    className={[
+                      'bar-chart-clip-label',
+                      i < 2 ? 'bar-chart-clip-label--left' : i >= dailyBars.length - 2 ? 'bar-chart-clip-label--right' : '',
+                      bar.labelCrowd ? `bar-chart-clip-label--crowd-${bar.labelCrowd}` : '',
+                    ].filter(Boolean).join(' ')}
+                    aria-hidden="true"
+                  >
+                    {bar.labelText}
+                  </span>
+                )}
                 <div className={tooltipClassName} role="tooltip">
                   <div className="bar-chart-tooltip-day">{monthShortLabel} {bar.day}</div>
                   <div className="bar-chart-tooltip-total">{formatOutflow(bar.total)} spent</div>
+                  {bar.clipped && (
+                    <div className="bar-chart-tooltip-offscale">Off the scale: bar is cut short</div>
+                  )}
                   {bar.biggest ? (
                     <div className="bar-chart-tooltip-biggest">
                       <span className="bar-chart-tooltip-swatch" style={{ background: bar.biggest.color }} />

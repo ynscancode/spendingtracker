@@ -4276,6 +4276,103 @@ textarea:disabled {
   color: var(--ink);
 }
 
+/* Capped-scale ("broken") bars. Everything here applies only when the chart
+   has at least one clipped bar (.bar-chart--clipped), so a chart without
+   outliers renders exactly as before. Hard edges only: the break is two
+   clip-path zigzags (a card-coloured gap band under a tomato tip). Shape,
+   not colour, carries the meaning, so it still reads in Mono. */
+.ov .bar-chart--clipped {
+  margin-top: 34px; /* room for the compact amount label above the bars */
+}
+
+.ov .bar-chart--clipped .bar-chart-bar {
+  --bw: 2px; /* matches the bar border-width (1.5px on phones) */
+  --br: 6px; /* matches the bar top radius (3px on phones) */
+  position: relative;
+}
+
+/* The break: a tomato tip, then a slanted card-coloured band cut across the
+   full outer width of the bar (left/right = -border width, so it severs the
+   side borders too). The band is an ink-outlined parallelogram: the outer
+   span is ink (--line, same as the bar border), ::after is the card-coloured
+   inside. 8px tall at the left edge, 12px at the right, 4px of visible card
+   between two 2px ink edges, so it stays a visible band on a 6px phone bar. */
+.ov .bar-chart-tip,
+.ov .bar-chart-gap {
+  position: absolute;
+  pointer-events: none;
+}
+
+.ov .bar-chart-tip {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: var(--tomato);
+  border-radius: calc(var(--br) - var(--bw)) calc(var(--br) - var(--bw)) 0 0;
+}
+
+.ov .bar-chart-gap {
+  z-index: 1;
+  top: 6px;
+  left: calc(-1 * var(--bw));
+  right: calc(-1 * var(--bw));
+  height: 12px;
+  background: var(--line);
+  clip-path: polygon(0 0, 100% 4px, 100% 12px, 0 8px);
+}
+
+.ov .bar-chart-gap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--card);
+  clip-path: polygon(0 2px, 100% 6px, 100% 10px, 0 6px);
+}
+
+/* Compact amount ("$2k") above the break. Ink on the card, never tomato text.
+   Centred on the bar; the first/last two bars anchor inward (as the ARCH-0015
+   tooltips do) so it never leaves the chart edges. No overflow clipping. */
+.ov .bar-chart-clip-label {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 3px;
+  font: 800 11px/1 var(--font-num);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ov .bar-chart-clip-label--left {
+  left: 0;
+  transform: none;
+}
+
+.ov .bar-chart-clip-label--right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Hide the label while its bar's tooltip is open (same :hover reveal as the tooltip, which already states the real total); visibility keeps the layout box. */
+.ov .bar-chart-bar-wrap:hover .bar-chart-clip-label {
+  visibility: hidden;
+}
+
+.ov .bar-chart-clip-label--crowd-all {
+  display: none;
+}
+
+.ov .bar-chart-tooltip-offscale {
+  margin-top: 2px;
+  font: 700 12px/1.3 var(--font-ui);
+  color: inherit;
+  opacity: 0.85;
+}
+
 /* Donuts */
 .ov .two-col-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
@@ -4956,8 +5053,23 @@ textarea:disabled {
     border-radius: 3px 3px 1px 1px;
   }
 
+  .ov .bar-chart--clipped .bar-chart-bar {
+    --bw: 1.5px;
+    --br: 3px;
+  }
+
   .ov .bar-chart-tooltip {
     width: 160px;
+  }
+
+  /* Clipped-bar labels: hidden on phones when another clipped bar is within
+     4 days (a label is ~3 bars wide at 390px, ~4 at 320px). */
+  .ov .bar-chart-clip-label {
+    font-size: 10px;
+  }
+
+  .ov .bar-chart-clip-label--crowd-phone {
+    display: none;
   }
 
   .ov .donut-wrap {
