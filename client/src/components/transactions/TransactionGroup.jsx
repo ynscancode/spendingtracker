@@ -6,14 +6,13 @@ import DayGroup from './DayGroup.jsx'
 // day <tbody> becomes a card), which can drop implicit table semantics. On
 // phones the header row is visually hidden but stays in the a11y tree so the
 // cells keep their column headers.
-export default function TransactionGroup({ year, monthsMap, editingId, onEdit, onSaveEdit, onCancelEdit, onDelete }) {
-  const months = [...monthsMap.entries()].sort(([a], [b]) => b.localeCompare(a))
-
+// `months` is already pruned by TransactionList: [[month, [[day, { all, visible }]]]]
+// sorted newest-first, with no empty days or months.
+export default function TransactionGroup({ year, months, editingId, onEdit, onSaveEdit, onCancelEdit, onDelete }) {
   return (
     <div className="year-group">
       <h2 className="tx-year">{year}</h2>
-      {months.map(([month, daysMap]) => {
-        const days = [...daysMap.entries()].sort(([a], [b]) => b.localeCompare(a))
+      {months.map(([month, days]) => {
         return (
           <div key={month} className="month-group table-card tx-card">
             <table role="table" aria-label={`Transactions, ${monthLabel(month)}`}>
@@ -33,11 +32,12 @@ export default function TransactionGroup({ year, monthsMap, editingId, onEdit, o
                   <td colSpan={7} role="cell" aria-colspan="7">{monthLabel(month)}</td>
                 </tr>
               </tbody>
-              {days.map(([day, txns]) => (
+              {days.map(([day, { all, visible }]) => (
                 <DayGroup
                   key={day}
                   date={day}
-                  txns={txns}
+                  allTxns={all}
+                  visibleTxns={visible}
                   editingId={editingId}
                   onEdit={onEdit}
                   onSaveEdit={onSaveEdit}

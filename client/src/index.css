@@ -1509,8 +1509,215 @@ textarea:disabled {
   display: flex;
   align-items: center;
   gap: 14px;
+  margin-left: 0;
+  margin-top: 1px;
+}
+
+/* Category filter group: sits immediately before the Account group; it owns
+   the `margin-left: auto` so both groups pack together at the right. */
+.filter-strip-cats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-left: auto;
   margin-top: 1px;
+}
+
+.cat-filter-trigger {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font: 700 13px/1 var(--font-ui);
+}
+
+.cat-filter-trigger.is-active {
+  background: var(--lime);
+  color: #121212;
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.cat-filter-count {
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-filter-reset {
+  min-height: 36px;
+  padding: 0 12px;
+  font: 600 12px/1 var(--font-ui);
+}
+
+.status-banner-action {
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 12px;
+  font: 700 12px/1 var(--font-ui);
+}
+
+.tx-filter-empty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 20px 18px;
+}
+
+.tx-filter-empty .empty-text {
+  margin: 0;
+}
+
+/* Category filter dialog. .modal-panel scrolls itself by default; this panel is
+   a flex column instead so the tools row and Done stay put while only the list
+   scrolls (the head is naturally pinned, so the ARCH-0025 sticky rule is moot). */
+.cat-filter-panel {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cat-filter-panel .modal-head {
+  flex: none;
+}
+
+.cat-filter-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: none;
+  padding: 0 0 10px;
+}
+
+.cat-filter-summary {
+  margin-right: auto;
+  font: 600 13px var(--font-ui);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-filter-bulk {
+  min-height: 36px;
+  padding: 0 14px;
+  font: 700 13px/1 var(--font-ui);
+}
+
+.cat-filter-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.cat-filter-foot {
+  flex: none;
+  padding-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cat-group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 14px;
+  min-width: 0;
+}
+
+.cat-group + .cat-group {
+  border-top: 2px solid var(--rule);
+  padding-top: 12px;
+}
+
+.cat-group legend {
+  padding: 0;
+  font: 700 14px var(--font-ui);
+  color: var(--ink);
+}
+
+.cat-subhead {
+  font: 700 11px/1 var(--font-ui);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 0 4px;
+}
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  font: 500 14px/1.25 var(--font-ui);
+  color: var(--ink);
+}
+
+.cat-row:hover {
+  background: var(--soft);
+}
+
+.cat-check {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  margin: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-content: center;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.cat-check::after {
+  content: '';
+  width: 10px;
+  height: 5px;
+  border-left: 3px solid #121212;
+  border-bottom: 3px solid #121212;
+  transform: rotate(-45deg) translate(1px, -1px);
+  opacity: 0;
+}
+
+.cat-check:checked {
+  background: var(--lime);
+}
+
+.cat-check:checked::after {
+  opacity: 1;
+}
+
+.cat-check:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.cat-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+}
+
+.cat-swatch-transfer {
+  background: var(--card);
+  border-style: dashed;
+}
+
+.cat-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (forced-colors: active) {
+  .cat-check:checked::after {
+    border-color: CanvasText;
+  }
 }
 
 /* Spend signals + balances strip */
@@ -5208,6 +5415,50 @@ textarea:disabled {
   .tx .day-sub-row {
     padding-block: 6px;
     border-top: 1px solid var(--rule);
+  }
+}
+
+/* Category filter, phone layout. Group wraps (label / trigger / Reset) with a
+   floor on the trigger so it can't be squeezed out; ghost buttons get 44px
+   targets. Placed after the main phone blocks, before the coarse-pointer rule. */
+@media (max-width: 760px) {
+  .filter-strip-cats {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 10px;
+  }
+
+  .cat-filter-trigger {
+    flex: 1 1 120px;
+    min-height: 44px;
+  }
+
+  .cat-filter-reset,
+  .cat-filter-bulk {
+    min-height: 44px;
+  }
+
+  .cat-row {
+    min-height: 48px;
+  }
+
+  .cat-filter-foot .btn {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .tx-filter-empty {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tx-filter-empty .btn-secondary {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .status-banner-action {
+    min-height: 44px;
   }
 }
 

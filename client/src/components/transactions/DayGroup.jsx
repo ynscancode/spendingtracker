@@ -21,8 +21,11 @@ function TotalRow({ label, totalIn, totalOut, balance, indent }) {
   )
 }
 
-export default function DayGroup({ date, txns, editingId, onEdit, onSaveEdit, onCancelEdit, onDelete }) {
-  const totals = computeDayTotals(txns)
+export default function DayGroup({ date, allTxns, visibleTxns, editingId, onEdit, onSaveEdit, onCancelEdit, onDelete }) {
+  const totals = computeDayTotals(allTxns, visibleTxns)
+  // Balance structure (per-account sub-rows, balances) is derived from ALL of
+  // the day's rows, so it is identical to the unfiltered view; only the rows
+  // and In/Out sums follow the category filter.
   // Only show the per-account breakdown when the day actually spans more than
   // one account — otherwise it just repeats the combined total.
   const showPerAccount = totals.perAccount.length > 1
@@ -45,7 +48,7 @@ export default function DayGroup({ date, txns, editingId, onEdit, onSaveEdit, on
           </div>
         </td>
       </tr>
-      {txns.map((txn) => (
+      {visibleTxns.map((txn) => (
         <TransactionRow
           key={txn.id}
           txn={txn}

@@ -6,6 +6,8 @@ import TransactionModal from '../components/transactions/TransactionModal.jsx'
 import ExportModal from '../components/transactions/ExportModal.jsx'
 import ClearHistoryModal from '../components/transactions/ClearHistoryModal.jsx'
 import CategoryManagerModal from '../components/transactions/CategoryManagerModal.jsx'
+import CategoryFilter from '../components/transactions/CategoryFilter.jsx'
+import { categoryKey, txnKey, TRANSFER_KEY } from '../components/transactions/categoryFilter.js'
 import MonthSwitcher from '../components/layout/MonthSwitcher.jsx'
 import AddFab from '../components/layout/AddFab.jsx'
 import { currentMonthStr, monthRangeFor, monthLabel } from '../utils/dateUtils.js'
@@ -28,7 +30,12 @@ export default function TransactionsPage() {
   const [exportOpen, setExportOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [catManagerOpen, setCatManagerOpen] = useState(false)
-  const [clearedMessage, setClearedMessage] = useState(null)
+  // Status banner slot: { text, action?: { label, onClick }, hiddenByFilter? }.
+  const [banner, setBanner] = useState(null)
+  // Category keys the user has unticked (see components/transactions/categoryFilter.js).
+  // Session-only; persists across month/account changes, ignored by Export.
+  const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
+  const catTriggerRef = useRef(null)
 
   // Latest-request-wins: a response is dropped if a newer request has started,
   // so a slow older fetch can't overwrite newer state (month/filter changes,
@@ -68,20 +75,57 @@ export default function TransactionsPage() {
     await Promise.all([loadTransactions(), refreshAccounts(), activity.refetch()])
   }
 
+  function handleFilterChange(next) {
+    setHiddenKeys(next)
+    // A "hidden by your filter" notice goes stale as soon as the filter moves.
+    setBanner((b) => (b?.hiddenByFilter ? null : b))
+  }
+
+  function showAllCategories() {
+    handleFilterChange(new Set())
+    catTriggerRef.current?.focus()
+  }
+
+  // After a save/create, tell the user when the row they just wrote is not
+  // visible because of the category filter (or clear a stale such notice).
+  // Non-transfer rows in an account the Account pill excludes aren't shown
+  // regardless of the filter, so they don't get the notice.
+  function noteIfHidden(key, accountId) {
+    const inScope = key === TRANSFER_KEY || accountFilter === 'all' || Number(accountFilter) === Number(accountId)
+    if (inScope && hiddenKeys.has(key)) {
+      setBanner({
+        text: 'Saved. This transaction is hidden by your category filter.',
+        hiddenByFilter: true,
+        action: { label: 'Show all', onClick: showAllCategories },
+      })
+    } else {
+      setBanner((b) => (b?.hiddenByFilter ? null : b))
+    }
+  }
+
   async function handleCreateTransaction(data) {
     await api.createTransaction(data)
     await refreshAfterMutation()
+    noteIfHidden(categoryKey(data.account_id, data.direction, data.category), data.account_id)
   }
 
   async function handleCreateTransfer(data) {
     await api.createTransfer(data)
     await refreshAfterMutation()
+    noteIfHidden(TRANSFER_KEY)
   }
 
   async function handleSaveEdit(id, data) {
+    const original = transactions.find((t) => t.id === id)
     await api.updateTransaction(id, data)
     setEditingId(null)
     await refreshAfterMutation()
+    if (!original) return
+    // Transfers send no category; keep the row's own key for them.
+    const key = original.is_transfer || data.category === undefined
+      ? txnKey(original)
+      : categoryKey(original.account_id, original.direction, data.category)
+    noteIfHidden(key, original.account_id)
   }
 
   async function handleDelete(txn) {
@@ -101,7 +145,7 @@ export default function TransactionsPage() {
   async function handleCleared() {
     setClearOpen(false)
     await refreshAfterMutation()
-    setClearedMessage('All transaction history has been deleted.')
+    setBanner({ text: 'All transaction history has been deleted.' })
   }
 
   return (
@@ -122,8 +166,15 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {clearedMessage && (
-        <div className="status-banner" role="status">{clearedMessage}</div>
+      {banner && (
+        <div className="status-banner" role="status">
+          {banner.text}
+          {banner.action && (
+            <button type="button" className="btn-ghost status-banner-action" onClick={banner.action.onClick}>
+              {banner.action.label}
+            </button>
+          )}
+        </div>
       )}
 
       <div className="filter-strip">
@@ -133,6 +184,13 @@ export default function TransactionsPage() {
           showActivityIndicator
           showJumpToEarliest
           activity={accountFilter === 'all' ? activity.all : activity.byAccount[accountFilter]}
+        />
+        <CategoryFilter
+          transactions={transactions}
+          scope={accountFilter}
+          hiddenKeys={hiddenKeys}
+          onChange={handleFilterChange}
+          triggerRef={catTriggerRef}
         />
         <div className="filter-strip-account">
           <span className="filter-strip-label">Account</span>
@@ -179,6 +237,8 @@ export default function TransactionsPage() {
         <TransactionList
           transactions={transactions}
           editingId={editingId}
+          isVisible={(txn) => !hiddenKeys.has(txnKey(txn))}
+          onShowAll={showAllCategories}
           onEdit={setEditingId}
           onSaveEdit={handleSaveEdit}
           onCancelEdit={() => setEditingId(null)}
