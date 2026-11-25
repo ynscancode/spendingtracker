@@ -83,3 +83,52 @@ export function formatCompactAmount(n) {
   if (k < 1000) return `$${trim(k)}k`
   return `$${trim(Math.round(r / 100000) / 10)}M`
 }
+
+/**
+ * Conservative width (px) of a compact label such as "$2.1k" at `fontPx`.
+ * Tabular digits, "$" and "k" ~0.62em, "." ~0.3em, +1px; calibrated against
+ * measured Bricolage 800 widths (11px: $950 28, $2.1k 30, $12.5k 37; 10px:
+ * $950 25, $2.1k 28) and errs 0-2px wide.
+ */
+export function estimateLabelWidth(text, fontPx) {
+  let em = 0
+  for (const ch of String(text)) em += ch === '.' ? 0.3 : 0.62
+  return em * fontPx + 1
+}
+
+/**
+ * Greedy interval packing of the clipped-bar labels into stacked rows (row 0
+ * is nearest the bars). Entries are scanned left to right; each goes in the
+ * lowest row where its horizontal extent keeps `gapPx` clear of every label
+ * already in that row. Nothing is ever dropped.
+ *
+ * @param {{index:number, widthPx:number, anchor?:'left'|'center'|'right'}[]} entries
+ *   `index` = 0-based bar position. Anchors mirror the CSS: 'left' starts at
+ *   the bar's left edge, 'right' ends at its right edge, 'center' is centred.
+ * @param {{pitchPx:number, chartWidthPx?:number, gapPx?:number, barWidthPx?:number}} geo
+ *   `pitchPx` = bar width + inter-bar gap; `barWidthPx` defaults to pitchPx.
+ * @returns {{rows:number[], rowCount:number, extents:{start:number,end:number}[]}}
+ *   `rows[k]` is the row of `entries[k]` (input order); `rowCount` is 0 when
+ *   there are no entries; `extents` are px from the chart's left edge.
+ */
+export function packClipLabels(entries, { pitchPx, gapPx = 3, barWidthPx = pitchPx } = {}) {
+  const extents = entries.map(({ index, widthPx, anchor = 'center' }) => {
+    const left = index * pitchPx
+    const start = anchor === 'left' ? left
+      : anchor === 'right' ? left + barWidthPx - widthPx
+      : left + barWidthPx / 2 - widthPx / 2
+    return { start, end: start + widthPx }
+  })
+  const order = entries.map((_, k) => k).sort((a, b) => extents[a].start - extents[b].start || entries[a].index - entries[b].index)
+  const placed = [] // placed[row] = extents in that row
+  const rows = new Array(entries.length).fill(0)
+  order.forEach((k) => {
+    const e = extents[k]
+    let r = 0
+    while (placed[r] && placed[r].some((o) => e.start < o.end + gapPx && o.start < e.end + gapPx)) r += 1
+    if (!placed[r]) placed[r] = []
+    placed[r].push(e)
+    rows[k] = r
+  })
+  return { rows, rowCount: placed.length, extents }
+}

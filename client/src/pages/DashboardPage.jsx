@@ -4,7 +4,8 @@ import { api } from '../api/client.js'
 import { todayStr, currentMonthStr, monthRangeFor, monthLabel, dayLabel } from '../utils/dateUtils.js'
 import { formatCurrency, formatSigned, formatOutflow } from '../utils/format.js'
 import { computeDailyInsights } from '../utils/insights.js'
-import { computeDailyScale, formatCompactAmount } from '../utils/dailyScale.js'
+import { computeDailyScale, formatCompactAmount, estimateLabelWidth, packClipLabels } from '../utils/dailyScale.js'
+import { useClipLabelMetrics } from '../hooks/useClipLabelMetrics.js'
 import { ACCOUNTS } from '../constants/categories.js'
 import { useDailyBudget } from '../hooks/useDailyBudget.js'
 import { useCategories } from '../contexts/categories.js'
@@ -200,6 +201,8 @@ export default function DashboardPage() {
     setEditingBudget(false)
   }
 
+  const [clipMetricsRaw, chartRef] = useClipLabelMetrics()
+
   if (loading) {
     return <div className="loading-placeholder"><p>Loading...</p></div>
   }
@@ -323,19 +326,29 @@ export default function DashboardPage() {
     // Bar tone: over the daily budget = tomato, today (current month only) =
     // lime, any other spend day = sky, no spend = flat soft stub.
     const tone = v === 0 ? 'empty' : over ? 'over' : (i + 1 === todayDayNumber ? 'today' : 'default')
-    // Label crowding: a compact label is ~3 bars wide at 390px, so another
-    // clipped bar within 1 day collides everywhere and within 4 days on phones.
-    const nearest = isClipped
-      ? Math.min(...clippedDays.filter((d) => d !== i + 1).map((d) => Math.abs(d - (i + 1))), Infinity)
-      : Infinity
     return {
       height: h, tone, total: v, biggest: dayBiggestMap[i + 1] || null, day: i + 1,
       clipped: isClipped,
       labelText: isClipped ? formatCompactAmount(v) : '',
-      labelCrowd: nearest <= 1 ? 'all' : nearest <= 4 ? 'phone' : null,
     }
   })
   const hasClipped = clippedDays.length > 0
+  // Clipped-bar labels are never hidden: where they would overlap they are
+  // stacked into rows (row 0 nearest the bars), measured from the live chart.
+  const clipMetrics = hasClipped ? clipMetricsRaw : null
+  const labelRows = {}
+  let labelRowCount = 1
+  if (clipMetrics && clipMetrics.width > 0 && totalDays > 0) {
+    const pitchPx = (clipMetrics.width + clipMetrics.gapPx) / totalDays
+    const entries = dailyBars.flatMap((b, i) => (b.clipped && b.labelText ? [{
+      index: i,
+      widthPx: estimateLabelWidth(b.labelText, clipMetrics.fontPx),
+      anchor: i < 2 ? 'left' : i >= totalDays - 2 ? 'right' : 'center',
+    }] : []))
+    const packed = packClipLabels(entries, { pitchPx, barWidthPx: pitchPx - clipMetrics.gapPx, gapPx: 3 })
+    entries.forEach((e, k) => { labelRows[e.index] = packed.rows[k] })
+    labelRowCount = Math.max(1, packed.rowCount)
+  }
 
   // Budget summary is Spending-only — budgeting doesn't apply to Savings.
   // The budgets array now always contains every Spending outgoing category
@@ -701,7 +714,11 @@ export default function DashboardPage() {
               {hasDailyBudget ? `Budget ${formatCurrency(dailyBudget)}/day` : 'No daily budget'}
             </span>
           </div>
-          <div className={hasClipped ? 'bar-chart bar-chart--clipped' : 'bar-chart'}>
+          <div
+            ref={hasClipped ? chartRef : undefined}
+            className={hasClipped ? 'bar-chart bar-chart--clipped' : 'bar-chart'}
+            style={hasClipped && labelRowCount > 1 ? { '--clip-extra-rows': labelRowCount - 1 } : undefined}
+          >
             {hasDailyBudget && (
               <div className="budget-line" style={{ bottom: `${Math.min(98, budgetPct)}%` }} />
             )}
@@ -737,8 +754,8 @@ export default function DashboardPage() {
                     className={[
                       'bar-chart-clip-label',
                       i < 2 ? 'bar-chart-clip-label--left' : i >= dailyBars.length - 2 ? 'bar-chart-clip-label--right' : '',
-                      bar.labelCrowd ? `bar-chart-clip-label--crowd-${bar.labelCrowd}` : '',
                     ].filter(Boolean).join(' ')}
+                    style={labelRows[i] ? { '--clip-row': labelRows[i] } : undefined}
                     aria-hidden="true"
                   >
                     {bar.labelText}

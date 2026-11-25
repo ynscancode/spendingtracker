@@ -4282,7 +4282,11 @@ textarea:disabled {
    clip-path zigzags (a card-coloured gap band under a tomato tip). Shape,
    not colour, carries the meaning, so it still reads in Mono. */
 .ov .bar-chart--clipped {
-  margin-top: 34px; /* room for the compact amount label above the bars */
+  --clip-font: 11px; /* label font; read by useClipLabelMetrics (10px on phones) */
+  --clip-row-h: 13px; /* one stacked label row = font + 2px */
+  /* room for the compact amount label above the bars, plus one extra row per
+     stacked label row actually used (--clip-extra-rows is set inline only then) */
+  margin-top: calc(34px + var(--clip-extra-rows, 0) * var(--clip-row-h));
 }
 
 .ov .bar-chart--clipped .bar-chart-bar {
@@ -4338,8 +4342,9 @@ textarea:disabled {
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 3px;
-  font: 800 11px/1 var(--font-num);
+  /* --clip-row (0 = nearest the bars) is set inline when labels are stacked */
+  margin-bottom: calc(3px + var(--clip-row, 0) * var(--clip-row-h, 13px));
+  font: 800 var(--clip-font, 11px)/1 var(--font-num);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   white-space: nowrap;
@@ -4360,10 +4365,6 @@ textarea:disabled {
 /* Hide the label while its bar's tooltip is open (same :hover reveal as the tooltip, which already states the real total); visibility keeps the layout box. */
 .ov .bar-chart-bar-wrap:hover .bar-chart-clip-label {
   visibility: hidden;
-}
-
-.ov .bar-chart-clip-label--crowd-all {
-  display: none;
 }
 
 .ov .bar-chart-tooltip-offscale {
@@ -5062,14 +5063,11 @@ textarea:disabled {
     width: 160px;
   }
 
-  /* Clipped-bar labels: hidden on phones when another clipped bar is within
-     4 days (a label is ~3 bars wide at 390px, ~4 at 320px). */
-  .ov .bar-chart-clip-label {
-    font-size: 10px;
-  }
-
-  .ov .bar-chart-clip-label--crowd-phone {
-    display: none;
+  /* Clipped-bar labels are ~3-4 bars wide on phones, so they stack in rows
+     (see packClipLabels); a slightly smaller font and row height here. */
+  .ov .bar-chart--clipped {
+    --clip-font: 10px;
+    --clip-row-h: 12px;
   }
 
   .ov .donut-wrap {
